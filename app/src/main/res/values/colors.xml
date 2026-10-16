@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window / splash only, before Compose draws. Mirrors ObsidianNeutrals.Dark background
+         and ObsidianAccent.Electric; everything in Compose reads ObsidianTheme instead. -->
+    <color name="window_background">#FF131316</color>
+    <color name="launcher_accent">#FF3D9BFF</color>
+</resources>

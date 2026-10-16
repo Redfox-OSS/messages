@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_incoming_messages">Incoming messages</string>
+    <string name="channel_incoming_messages_description">New SMS and MMS</string>
+    <string name="notification_mms_title">Multimedia message received</string>
+    <string name="notification_mms_text">MMS support is not ready yet. The message is still on your carrier\'s server.</string>
+</resources>
