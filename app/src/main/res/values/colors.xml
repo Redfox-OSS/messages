@@ -4,4 +4,6 @@
          and ObsidianAccent.Electric; everything in Compose reads ObsidianTheme instead. -->
     <color name="window_background">#FF131316</color>
     <color name="launcher_accent">#FF3D9BFF</color>
+    <!-- Launcher icon ("Corner"): Electric bubble on deep graphite. -->
+    <color name="launcher_background">#FF0B0D12</color>
 </resources>
