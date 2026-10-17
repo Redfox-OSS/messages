@@ -55,6 +55,21 @@ class PduRoundTripTest {
     }
 
     @Test
+    fun `plain numbers get one routing suffix each, and the sender's number goes as From`() {
+        val request = SendReq().apply {
+            from = EncodedStringValue("+916350000000")
+            addTo(EncodedStringValue("+919876543210"))
+            body = PduBody().apply { addPart(part("text/plain", "text_0.txt", "Hi".toByteArray(), text = true)) }
+        }
+        val bytes = PduComposer(context, request).make()
+        val wire = String(bytes, Charsets.ISO_8859_1)
+
+        assertEquals(2, Regex(Regex.escape("/TYPE=PLMN")).findAll(wire).count()) // From and To, once each
+        assertTrue(wire.contains("+919876543210/TYPE=PLMN"))
+        assertEquals("+916350000000", (PduParser(bytes).parse() as SendReq).from.string)
+    }
+
+    @Test
     fun `download acknowledgement encodes as notify-resp`() {
         val ack = NotifyRespInd(PduHeaders.CURRENT_MMS_VERSION, "T123".toByteArray(), PduHeaders.STATUS_RETRIEVED)
         val bytes = PduComposer(context, ack).make()

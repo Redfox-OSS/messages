@@ -258,6 +258,28 @@ class MmsStore @Inject constructor(
         return to.joinToString() to threadId
     }
 
+    /**
+     * The transaction id the carrier gave a stored notification. The reply to the carrier after a
+     * download must carry it (the downloaded message itself usually has none).
+     */
+    fun transactionId(uri: Uri): ByteArray? = resolver.query(uri, arrayOf(BaseMmsColumns.TRANSACTION_ID), null, null, null)
+        ?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null }
+        ?.takeIf { it.isNotEmpty() }
+        ?.toByteArray(Charsets.ISO_8859_1)
+
+    /** Whether [uri] is still in the store (the user may delete a message while it's being retried). */
+    fun exists(uri: Uri): Boolean = resolver.query(uri, arrayOf(BaseMmsColumns._ID), null, null, null)?.use { it.moveToFirst() } == true
+
+    /** This SIM's own number, when the phone knows it (often it doesn't in India). */
+    fun selfNumber(subId: Int): String? {
+        val subscriptions = context.getSystemService(SubscriptionManager::class.java)
+        val telephony = context.getSystemService(android.telephony.TelephonyManager::class.java)
+        return listOfNotNull(
+            runCatching { subscriptions?.getPhoneNumber(subId) }.getOrNull(),
+            runCatching { @Suppress("DEPRECATION") telephony?.createForSubscriptionId(subId)?.line1Number }.getOrNull(),
+        ).firstOrNull { it.isNotBlank() }
+    }
+
     /** The details needed to retry a download. */
     fun notificationDetails(uri: Uri): Pair<String, Int>? = resolver.query(
         uri, arrayOf(BaseMmsColumns.CONTENT_LOCATION, BaseMmsColumns.SUBSCRIPTION_ID), null, null, null,

@@ -80,6 +80,11 @@
             android:name=".mms.MmsSentReceiver"
             android:exported="false" />
 
+        <!-- Automatic resends of an MMS after a temporary failure. -->
+        <receiver
+            android:name=".mms.MmsRetryReceiver"
+            android:exported="false" />
+
         <!-- Sent / delivered callbacks for messages we hand to SmsManager. -->
         <receiver
             android:name=".send.SmsStatusReceiver"
