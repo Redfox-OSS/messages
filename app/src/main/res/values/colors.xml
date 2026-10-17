@@ -3,7 +3,7 @@
     <!-- Window / splash only, before Compose draws. Mirrors ObsidianNeutrals.Dark background
          and ObsidianAccent.Electric; everything in Compose reads ObsidianTheme instead. -->
     <color name="window_background">#FF131316</color>
-    <color name="launcher_accent">#FF3D9BFF</color>
-    <!-- Launcher icon ("Corner"): Electric bubble on deep graphite. -->
-    <color name="launcher_background">#FF0B0D12</color>
+    <!-- Launcher icon ("Corner", Electric): white bubble on an Electric-blue tile. -->
+    <color name="launcher_background">#FF3D9BFF</color>
+    <color name="launcher_bubble">#FFFFFFFF</color>
 </resources>
