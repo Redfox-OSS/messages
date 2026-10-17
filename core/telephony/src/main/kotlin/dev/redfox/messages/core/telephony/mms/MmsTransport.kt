@@ -99,7 +99,9 @@ class MmsTransport @Inject constructor(
                 .setData(uri)
                 .putExtra(EXTRA_FILE, file.absolutePath)
             smsManager(sub).sendMultimediaMessage(context, fileUri(file), null, null, broadcast(intent))
-        } catch (e: RuntimeException) {
+        } catch (e: Exception) {
+            // The message is already in the conversation: it shows as failed (tap to retry),
+            // never also back in the composer, where it would be sent twice.
             Log.e(TAG, "MMS send failed before reaching the radio", e)
             store.markFailed(uri)
         }

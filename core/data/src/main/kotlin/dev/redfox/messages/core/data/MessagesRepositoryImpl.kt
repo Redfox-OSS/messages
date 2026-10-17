@@ -81,7 +81,11 @@ internal class MessagesRepositoryImpl @Inject constructor(
     }
 
     override suspend fun sendSms(addresses: List<String>, body: String, subscriptionId: Int) = withContext(io) {
-        addresses.forEach { sender.send(it, body, subscriptionId) }
+        Log.w(TAG, "Sending SMS to ${addresses.size} recipient(s)")
+        addresses.forEach { address ->
+            // Nothing stored means nothing sent: say so, so the composer gives the text back.
+            sender.send(address, body, subscriptionId) ?: error("Couldn't save the message")
+        }
     }
 
     override suspend fun sendMms(

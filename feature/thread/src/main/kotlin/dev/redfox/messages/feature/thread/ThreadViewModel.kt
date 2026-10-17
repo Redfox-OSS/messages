@@ -292,12 +292,17 @@ class ThreadViewModel @AssistedInject constructor(
             sendSms(snapshot.recipients, snapshot.draft, snapshot.selectedSim?.subscriptionId ?: NO_SIM, snapshot.attachments)
         }
         val sent = result.getOrDefault(false)
+        // Nothing went out: give the text back, but never the photos or voice notes. Left in the
+        // composer they'd quietly turn the next "plain" text into an MMS too.
         reduce {
             if (sent) copy(isSending = false)
-            else copy(isSending = false, draft = snapshot.draft, attachments = snapshot.attachments)
+            else copy(isSending = false, draft = snapshot.draft)
         }
         if (sent) emit(ThreadEffect.ScrollToNewest)
-        result.exceptionOrNull()?.let { emit(ThreadEffect.ShowError(it.message ?: "Couldn't send")) }
+        result.exceptionOrNull()?.let { error ->
+            val reason = error.message ?: "Couldn't send"
+            emit(ThreadEffect.ShowError(if (snapshot.attachments.isEmpty()) reason else "$reason. Attachment removed; your text is back in the box."))
+        }
     }
 
     private suspend fun schedule(sendAt: Long) {
