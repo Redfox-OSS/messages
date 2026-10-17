@@ -37,18 +37,34 @@ class ContactResolver @Inject constructor(
             ?: Locale.getDefault().country).uppercase(Locale.ROOT)
     }
 
-    init {
-        context.contentResolver.registerContentObserver(
-            ContactsContract.Contacts.CONTENT_URI,
-            true,
-            object : ContentObserver(Handler(Looper.getMainLooper())) {
-                override fun onChange(selfChange: Boolean) = cache.clear()
-            },
-        )
+    /** Drops cached names whenever the phone book changes. */
+    private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) = cache.clear()
+    }
+
+    @Volatile private var observing = false
+
+    /**
+     * Listening to the contacts provider needs READ_CONTACTS: Samsung's provider throws
+     * without it (a fresh install crashed on launch). So register only once permission is
+     * there, the first time a lookup runs with it.
+     */
+    private fun observeContactsIfPermitted(permitted: Boolean) {
+        if (observing || !permitted) return
+        synchronized(this) {
+            if (observing) return
+            observing = try {
+                context.contentResolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
+                true
+            } catch (e: SecurityException) {
+                false
+            }
+        }
     }
 
     fun resolve(address: String): Contact {
         val permitted = hasContactsPermission()
+        observeContactsIfPermitted(permitted)
         cache[address]?.let { (contact, lookedUpWithPermission) ->
             // Re-resolve once if contacts access was granted after the first lookup.
             if (lookedUpWithPermission || !permitted) return contact

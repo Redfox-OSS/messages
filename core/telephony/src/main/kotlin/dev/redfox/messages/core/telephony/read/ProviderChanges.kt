@@ -33,7 +33,13 @@ class ProviderChanges @Inject constructor(
         }
         // Providers differ in which URI they announce a change on (Samsung notifies MMS updates
         // on content://mms only), so listen on all three.
-        WATCHED.forEach { context.contentResolver.registerContentObserver(it, true, observer) }
+        // Without READ_SMS some providers refuse observers outright; then there's nothing to watch.
+        try {
+            WATCHED.forEach { context.contentResolver.registerContentObserver(it, true, observer) }
+        } catch (e: SecurityException) {
+            close()
+            return@callbackFlow
+        }
         awaitClose { context.contentResolver.unregisterContentObserver(observer) }
     }
         .debounce(250)

@@ -17,3 +17,6 @@ keystore.properties
 
 # Local Claude Code settings (per machine)
 .claude/settings.local.json
+
+# Shareable release APKs
+/dist/
