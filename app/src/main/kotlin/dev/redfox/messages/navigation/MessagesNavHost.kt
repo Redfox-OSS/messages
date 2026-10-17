@@ -85,9 +85,6 @@ fun MessagesNavHost(
             entry<SavedKey> { key ->
                 Reveal(navigator, key) { SavedRoute(onOpenThread = { navigator.navigate(ThreadKey(it)) }) }
             }
-            entry<SearchKey> { key ->
-                Reveal(navigator, key) { SearchPlaceholder(onBack = { navigator.back() }) }
-            }
             entry<SettingsKey> { key ->
                 Reveal(navigator, key) {
                     SettingsRoute(

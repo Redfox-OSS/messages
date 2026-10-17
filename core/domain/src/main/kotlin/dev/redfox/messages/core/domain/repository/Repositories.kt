@@ -5,6 +5,7 @@ import dev.redfox.messages.core.model.AppSettings
 import dev.redfox.messages.core.model.DeviceSetupStatus
 import dev.redfox.messages.core.model.Message
 import dev.redfox.messages.core.model.ScheduledMessage
+import dev.redfox.messages.core.model.SearchResults
 import dev.redfox.messages.core.model.StarredMessage
 import dev.redfox.messages.core.model.SwipeAction
 import dev.redfox.messages.core.model.VibrationPattern
@@ -43,4 +44,9 @@ interface ScheduledRepository {
 interface DeviceSetupRepository {
     /** Snapshot of role, permission and battery state. Cheap; call on every resume. */
     fun currentStatus(): DeviceSetupStatus
+}
+
+interface SearchRepository {
+    /** Conversations whose names or numbers contain [query], and messages whose text does, newest first. */
+    suspend fun search(query: String, conversationLimit: Int, messageLimit: Int): SearchResults
 }

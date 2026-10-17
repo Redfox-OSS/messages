@@ -203,6 +203,94 @@ class TelephonyReader @Inject constructor(
         }.orEmpty().take(MAX_PARTICIPANTS)
 
     // ---------------------------------------------------------------------------------------
+    // Search
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Messages whose text contains [query] (case-insensitive), newest first, at most [limit]:
+     * SMS bodies and MMS text parts, straight from the store. Senders are bare addresses.
+     */
+    fun searchMessages(query: String, limit: Int): List<Message> {
+        val pattern = "%" + escapeLike(query) + "%"
+        val sms = ArrayList<Message>()
+        resolver.query(
+            Telephony.Sms.CONTENT_URI,
+            arrayOf(
+                Telephony.Sms._ID, TextBasedSmsColumns.THREAD_ID, TextBasedSmsColumns.ADDRESS, TextBasedSmsColumns.BODY,
+                TextBasedSmsColumns.DATE, TextBasedSmsColumns.TYPE, TextBasedSmsColumns.READ, TextBasedSmsColumns.SUBSCRIPTION_ID,
+            ),
+            "${TextBasedSmsColumns.BODY} LIKE ? ESCAPE '\\' AND ${TextBasedSmsColumns.TYPE} != ${TextBasedSmsColumns.MESSAGE_TYPE_DRAFT}",
+            arrayOf(pattern),
+            "${TextBasedSmsColumns.DATE} DESC LIMIT $limit",
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val box = smsBox(c.int(TextBasedSmsColumns.TYPE))
+                val address = c.string(TextBasedSmsColumns.ADDRESS)
+                sms += Message(
+                    id = c.long(Telephony.Sms._ID),
+                    threadId = c.long(TextBasedSmsColumns.THREAD_ID),
+                    kind = MessageKind.Sms,
+                    box = box,
+                    sender = if (box == MessageBox.Inbox && address != null) Contact(address) else null,
+                    body = c.string(TextBasedSmsColumns.BODY).orEmpty(),
+                    timestamp = c.long(TextBasedSmsColumns.DATE),
+                    isRead = c.int(TextBasedSmsColumns.READ) == 1,
+                    subscriptionId = c.int(TextBasedSmsColumns.SUBSCRIPTION_ID),
+                )
+            }
+        }
+        return (sms + searchMms(pattern, limit))
+            .sortedWith(compareByDescending<Message> { it.timestamp }.thenByDescending { it.id })
+            .take(limit)
+    }
+
+    private fun searchMms(pattern: String, limit: Int): List<Message> {
+        val texts = LinkedHashMap<Long, String>()
+        resolver.query(
+            MMS_PARTS,
+            arrayOf(Telephony.Mms.Part.MSG_ID, Telephony.Mms.Part.TEXT),
+            "${Telephony.Mms.Part.CONTENT_TYPE} = 'text/plain' AND ${Telephony.Mms.Part.TEXT} LIKE ? ESCAPE '\\'",
+            arrayOf(pattern),
+            "${Telephony.Mms.Part.MSG_ID} DESC LIMIT $limit",
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val text = c.getString(1).orEmpty()
+                // Chatbot cards keep JSON in text parts; matching their markup isn't useful.
+                if (!RichMessageParser.looksLikeRichMessage(text)) texts.putIfAbsent(c.getLong(0), text)
+            }
+        }
+        if (texts.isEmpty()) return emptyList()
+        val out = ArrayList<Message>()
+        texts.keys.chunked(IN_CHUNK).forEach { chunk ->
+            resolver.query(
+                Telephony.Mms.CONTENT_URI,
+                arrayOf(Telephony.Mms._ID, BaseMmsColumns.THREAD_ID, BaseMmsColumns.DATE, BaseMmsColumns.MESSAGE_BOX,
+                    BaseMmsColumns.READ, BaseMmsColumns.SUBSCRIPTION_ID),
+                "${Telephony.Mms._ID} IN (${chunk.joinToString(",")})",
+                null,
+                null,
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val id = c.long(Telephony.Mms._ID)
+                    val box = mmsBox(c.int(BaseMmsColumns.MESSAGE_BOX))
+                    out += Message(
+                        id = id,
+                        threadId = c.long(BaseMmsColumns.THREAD_ID),
+                        kind = MessageKind.Mms,
+                        box = box,
+                        sender = if (box == MessageBox.Inbox) readMmsSender(id)?.let(::Contact) else null,
+                        body = texts[id].orEmpty(),
+                        timestamp = c.long(BaseMmsColumns.DATE) * 1000,
+                        isRead = c.int(BaseMmsColumns.READ) == 1,
+                        subscriptionId = c.int(BaseMmsColumns.SUBSCRIPTION_ID),
+                    )
+                }
+            }
+        }
+        return out
+    }
+
+    // ---------------------------------------------------------------------------------------
     // Messages
     // ---------------------------------------------------------------------------------------
 
@@ -493,3 +581,7 @@ private fun Cursor.int(column: String): Int = intOrNull(column) ?: 0
 
 private fun Cursor.intOrNull(column: String): Int? =
     getColumnIndex(column).takeIf { it >= 0 && !isNull(it) }?.let(::getInt)
+
+/** Escapes LIKE wildcards so "50%" or "a_b" match literally (paired with ESCAPE '\\'). */
+internal fun escapeLike(text: String): String =
+    text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

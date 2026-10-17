@@ -37,6 +37,16 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE thread_id = :threadId")
     fun observe(threadId: Long): Flow<ConversationEntity?>
 
+    /** Search: [pattern] is a LIKE pattern over the encoded participants (names and numbers). */
+    @Query(
+        "SELECT * FROM conversations WHERE participants LIKE :pattern ESCAPE '\\' " +
+            "ORDER BY pinned DESC, timestamp DESC LIMIT :limit"
+    )
+    suspend fun searchParticipants(pattern: String, limit: Int): List<ConversationEntity>
+
+    @Query("SELECT * FROM conversations WHERE thread_id IN (:threadIds)")
+    suspend fun byIds(threadIds: List<Long>): List<ConversationEntity>
+
     @Query("SELECT COUNT(*) FROM conversations")
     fun observeCount(): Flow<Int>
 

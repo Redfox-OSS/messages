@@ -91,6 +91,7 @@ dependencies {
     implementation(project(":feature:starred"))
     implementation(project(":feature:scheduled"))
     implementation(project(":feature:settings"))
+    implementation(project(":feature:search"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

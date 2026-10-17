@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -30,6 +33,7 @@ import dev.redfox.messages.core.model.AppAccent
 import dev.redfox.messages.core.model.AppSettings
 import dev.redfox.messages.core.telephony.MessageLaunchExtras
 import dev.redfox.messages.core.ui.mvi.CollectEffects
+import dev.redfox.messages.feature.search.SearchOverlay
 import dev.redfox.messages.feature.thread.ThreadKey
 import dev.redfox.messages.feature.thread.newchat.NewConversationKey
 import kotlinx.coroutines.flow.Flow
@@ -40,7 +44,6 @@ import dev.redfox.messages.feature.onboarding.OnboardingKey
 import dev.redfox.messages.navigation.MessagesNavHost
 import dev.redfox.messages.navigation.NewMessageItem
 import dev.redfox.messages.navigation.SearchItem
-import dev.redfox.messages.navigation.SearchKey
 import dev.redfox.messages.navigation.TabItems
 import dev.redfox.messages.navigation.Tabs
 import dev.redfox.messages.navigation.rememberNavigator
@@ -136,6 +139,8 @@ private fun MessagesShell(
     val selectedTab = Tabs.indexOfFirst { it.key == navigator.current }
     // Compacts the nav while lists scroll toward their end; expands on reverse, top, or destination change.
     val (compactNav, navScroll) = rememberCompactNavState(resetKey = navigator.current)
+    // Search opens in place over the current tab, growing out of the nav bar's search pill.
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
     CollectEffects(effects) { effect ->
         // Before onboarding finishes there's no inbox to open into.
         if (!settings.onboardingCompleted) return@CollectEffects
@@ -156,7 +161,7 @@ private fun MessagesShell(
         )
         // The floating nav belongs to tab destinations only; pushed screens get the full height.
         AnimatedVisibility(
-            visible = selectedTab >= 0,
+            visible = selectedTab >= 0 && !searchOpen,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter = slideInVertically(ObMotion.gentle()) { it } + fadeIn(),
             exit = slideOutVertically(ObMotion.gentle()) { it } + fadeOut(),
@@ -169,8 +174,13 @@ private fun MessagesShell(
                 action = NewMessageItem,
                 onAction = { navigator.navigate(NewConversationKey()) },
                 pill = SearchItem,
-                onPill = { navigator.navigate(SearchKey) },
+                onPill = { searchOpen = true },
             )
         }
+        SearchOverlay(
+            open = searchOpen,
+            onClose = { searchOpen = false },
+            onOpenThread = { navigator.navigate(ThreadKey(it)) },
+        )
     }
 }
