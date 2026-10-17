@@ -36,8 +36,27 @@ class LinkBrandsTest {
     fun `lookalike hosts do not match`() {
         assertNull(brand("https://notyoutube.com/watch"))
         assertNull(brand("https://youtube.com.evil.example/x"))
-        assertNull(brand("https://bsnlapp.bsnl.co.in/bsnl/app"))
+        assertNull(brand("https://hdfcbank.com.example.net/x"))
     }
+
+    @Test
+    fun `bsnl and hdfc bank links, including their short links`() {
+        assertEquals("BSNL", brand("https://bsnlapp.bsnl.co.in/bsnl/app"))
+        assertEquals("BSNL", brand("https://bsnlselfcare.page.link/abc"))
+        assertEquals("BSNL", brand("https://bookmyfiber.bsnl.co.in/x"))
+        assertEquals("HDFC Bank", brand("https://hdfcbk.io/HDFCBK/a/xyz"))
+        assertEquals("HDFC Bank", brand("https://1.hdfc.bank.in/x"))
+        assertEquals("HDFC Bank", brand("https://www.hdfcbank.com/personal"))
+        // Other banks on the shared .bank.in domain aren't HDFC.
+        assertNull(brand("https://ccm.axis.bank.in/AXISBK/t3CrXKnx"))
+    }
+
+    @Test
+    fun `scheme-less short links found in sms text get a button`() =
+        assertEquals(
+            listOf("HDFC Bank", "BSNL"),
+            LinkBrands.find("Pay at hdfcbk.io/HDFCBK/a/1 or recharge via bsnlselfcare.page.link/xy").map { it.brand.name },
+        )
 
     @Test
     fun `find returns one button per brand in order`() {

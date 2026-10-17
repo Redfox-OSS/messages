@@ -33,6 +33,8 @@
         <package android:name="cris.org.in.prs.ima" />
         <package android:name="com.myairtelapp" />
         <package android:name="com.jio.myjio" />
+        <package android:name="com.rma.bsnl" />
+        <package android:name="com.snapwork.hdfc" />
         <package android:name="com.github.android" />
     </queries>
 </manifest>

@@ -63,6 +63,11 @@ object LinkBrands {
         LinkBrand("IRCTC", "cris.org.in.prs.ima", 0xFF213D77, listOf("irctc.co.in")),
         LinkBrand("Airtel", "com.myairtelapp", 0xFFE40000, listOf("airtel.in", "i.airtel.in")),
         LinkBrand("Jio", "com.jio.myjio", 0xFF0A3A8C, listOf("jio.com")),
+        LinkBrand(
+            "BSNL", "com.rma.bsnl", 0xFF0072BC,
+            listOf("bsnl.co.in", "bsnl.in", "bsnlselfcare.page.link", "mybsnl.page.link"),
+        ),
+        LinkBrand("HDFC Bank", "com.snapwork.hdfc", 0xFF004C8F, listOf("hdfcbank.com", "hdfc.bank.in", "hdfcbk.io", "hdfcbank.net")),
         LinkBrand("GitHub", "com.github.android", 0xFF24292F, listOf("github.com")),
     )
 
