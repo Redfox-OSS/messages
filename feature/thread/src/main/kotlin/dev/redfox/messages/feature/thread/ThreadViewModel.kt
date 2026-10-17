@@ -85,8 +85,6 @@ sealed interface ThreadIntent : UiIntent {
 sealed interface ThreadEffect : UiEffect {
     data class OpenUrl(val url: String) : ThreadEffect
     data class Dial(val phoneNumber: String) : ThreadEffect
-    /** Open [url] in the brand's app ([packageName]) when installed, else the browser. */
-    data class OpenInApp(val url: String, val packageName: String) : ThreadEffect
     /** A message was just sent: bring the newest message into view. */
     data object ScrollToNewest : ThreadEffect
 }
@@ -176,7 +174,8 @@ class ThreadViewModel @AssistedInject constructor(
             }
             ThreadIntent.Send -> send()
             is ThreadIntent.Retry -> retryMessage(intent.message)
-            is ThreadIntent.OpenBrandLink -> emit(ThreadEffect.OpenInApp(intent.link.url, intent.link.brand.packageName))
+            // Same as tapping the link itself: Android opens it in the app that claims it, else the browser.
+            is ThreadIntent.OpenBrandLink -> emit(ThreadEffect.OpenUrl(intent.link.url))
         }
     }
 

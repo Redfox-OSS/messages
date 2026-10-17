@@ -5,8 +5,9 @@ import java.net.URI
 /**
  * A well-known service whose links get an "Open in …" button under the message.
  *
- * [packageName] is its Android app: when installed, the button shows that app's own icon and
- * opens the link straight in it. [color] (ARGB) tints the letter tile shown otherwise.
+ * [packageName] is its Android app: when installed, the button shows that app's own icon.
+ * Tapping opens the link like any link tap (the app if it claims the link, else the browser).
+ * [color] (ARGB) tints the letter tile shown when the app isn't installed.
  */
 data class LinkBrand(
     val name: String,
