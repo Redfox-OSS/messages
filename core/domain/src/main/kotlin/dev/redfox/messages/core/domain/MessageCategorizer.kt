@@ -12,14 +12,6 @@ import dev.redfox.messages.core.model.MessageCategory
  */
 object MessageCategorizer {
 
-    private val otpKeywords = Regex(
-        """\b(otp|one[\s-]?time\s+(pass(word|code)?|pin)|verification\s+code|security\s+code|login\s+code|""" +
-            """auth(entication)?\s+code|passcode|code\s+is|is\s+your\s+(\w+\s+)?code)\b""",
-        RegexOption.IGNORE_CASE,
-    )
-    // A standalone 4–8 digit run: not part of an amount like "1,250.00" (separator *between* digits).
-    private val otpDigits = Regex("""(?<!\d)(?<!\d[.,])\d{4,8}(?!\d)(?![.,]\d)""")
-
     private val transactionKeywords = Regex(
         """\b(debited|credited|a/c|acct|account\s+\w*\s*(debited|credited)|upi|txn|transaction|spent|""" +
             """withdrawn|refund(ed)?|avl\.?\s*bal|available\s+balance|neft|imps|rtgs|emi)\b""",
@@ -34,7 +26,7 @@ object MessageCategorizer {
         return MessageCategory.Offers
     }
 
-    fun isOtp(text: String): Boolean = otpKeywords.containsMatchIn(text) && otpDigits.containsMatchIn(text)
+    fun isOtp(text: String): Boolean = OtpExtractor.extract(text) != null
 
     fun isTransaction(text: String): Boolean =
         transactionKeywords.containsMatchIn(text) && amount.containsMatchIn(text)

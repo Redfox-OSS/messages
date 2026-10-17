@@ -1,27 +1,30 @@
 package dev.redfox.messages.feature.thread
 
-import androidx.compose.foundation.background
+import android.content.Intent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.core.net.toUri
-import android.content.Intent
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavKey
@@ -30,21 +33,31 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
 import dev.redfox.messages.core.ui.components.BubblePosition
+import dev.redfox.messages.core.ui.components.ComposerBar
+import dev.redfox.messages.core.ui.components.ComposerNotice
 import dev.redfox.messages.core.ui.components.DateDivider
 import dev.redfox.messages.core.ui.components.DetailPage
 import dev.redfox.messages.core.ui.components.MessageBubble
 import dev.redfox.messages.core.ui.components.RichCardBubble
-import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.messages.core.ui.format.TimeFormat
-import dev.redfox.obsidian.effects.glassEffect
+import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.obsidian.effects.glassSource
 import dev.redfox.obsidian.motion.revealOnEnter
 import dev.redfox.obsidian.theme.ObSpacing
-import dev.redfox.obsidian.theme.ObsidianTheme
 import kotlinx.serialization.Serializable
 
+/**
+ * A conversation. [addresses] and [title] are set when it's opened for someone new (from the
+ * recipient picker or another app's "send SMS" link), before the thread has any messages;
+ * [draft] pre-fills the composer.
+ */
 @Serializable
-data class ThreadKey(val threadId: Long) : NavKey
+data class ThreadKey(
+    val threadId: Long,
+    val addresses: List<String> = emptyList(),
+    val title: String? = null,
+    val draft: String? = null,
+) : NavKey
 
 /** Only the newest screenful plays the entrance; older history just appears. */
 private const val RevealedRows = 12
@@ -54,11 +67,12 @@ fun ThreadRoute(
     key: ThreadKey,
     onBack: () -> Unit,
     viewModel: ThreadViewModel = hiltViewModel<ThreadViewModel, ThreadViewModel.Factory>(
-        creationCallback = { factory -> factory.create(key.threadId) }
+        creationCallback = { factory -> factory.create(key.threadId, key.addresses, key.title, key.draft) }
     ),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val rows = viewModel.rows.collectAsLazyPagingItems()
+    val listState = rememberLazyListState()
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
     CollectEffects(viewModel.effects) { effect ->
@@ -68,31 +82,43 @@ fun ThreadRoute(
                 // ACTION_DIAL only pre-fills the dialler: no call permission, the user confirms.
                 context.startActivity(Intent(Intent.ACTION_DIAL, "tel:${effect.phoneNumber}".toUri()))
             }
+            ThreadEffect.ScrollToNewest -> listState.animateScrollToItem(0)
         }
     }
-    ThreadScreen(state = state, rows = rows, timeFormat = viewModel.timeFormat, onBack = onBack, onIntent = viewModel::dispatch)
+    ThreadScreen(
+        state = state,
+        rows = rows,
+        listState = listState,
+        timeFormat = viewModel.timeFormat,
+        onBack = onBack,
+        onIntent = viewModel::dispatch,
+    )
 }
 
 @Composable
 fun ThreadScreen(
     state: ThreadState,
     rows: LazyPagingItems<ThreadRow>,
+    listState: LazyListState,
     timeFormat: TimeFormat,
     onBack: () -> Unit,
     onIntent: (ThreadIntent) -> Unit,
 ) {
-    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    // The composer floats over the list; the list's end padding follows its real height.
+    var composerHeight by remember { mutableIntStateOf(0) }
 
     DetailPage(title = state.title, onBack = onBack) { padding ->
-        Box(Modifier.fillMaxSize()) {
+        // The keyboard pushes list and composer up together.
+        Box(Modifier.fillMaxSize().imePadding()) {
             LazyColumn(
                 state = listState,
                 reverseLayout = true,
                 modifier = Modifier.glassSource().fillMaxSize(),
-                // Reversed: "top" padding sits under the header, "bottom" above the read-only bar.
+                // Reversed: "top" padding sits under the header, "bottom" above the composer.
                 contentPadding = PaddingValues(
                     top = padding.calculateTopPadding(),
-                    bottom = padding.calculateBottomPadding() + 48.dp,
+                    bottom = with(density) { composerHeight.toDp() } + ObSpacing.S,
                 ),
             ) {
                 items(
@@ -125,6 +151,7 @@ fun ThreadScreen(
                                 position = layout.position,
                                 timeLabel = layout.timeLabel,
                                 showSenderName = layout.showSender,
+                                onRetry = { onIntent(ThreadIntent.Retry(row.message)) },
                                 modifier = reveal.padding(
                                     // Tight gap inside a run, a breath between runs.
                                     top = if (layout.position == BubblePosition.Middle || layout.position == BubblePosition.Last) 2.dp
@@ -135,31 +162,30 @@ fun ThreadScreen(
                     }
                 }
             }
-            ReadOnlyBar(Modifier.align(Alignment.BottomCenter))
+
+            val composerModifier = Modifier
+                .align(Alignment.BottomCenter)
+                .onSizeChanged { composerHeight = it.height }
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(bottom = ObSpacing.S)
+            if (state.canReply) {
+                ComposerBar(
+                    text = state.draft,
+                    onTextChange = { onIntent(ThreadIntent.DraftChanged(it)) },
+                    onSend = { onIntent(ThreadIntent.Send) },
+                    canSend = state.canSend,
+                    sim = state.selectedSim,
+                    showSim = state.showSimPicker,
+                    onSimClick = { onIntent(ThreadIntent.SwitchSim) },
+                    counter = state.counter,
+                    modifier = composerModifier,
+                )
+            } else if (state.recipients.isNotEmpty()) {
+                ComposerNotice("Group replies need MMS, which isn't supported yet", composerModifier)
+            }
         }
     }
 }
 
 private fun <T : Any> LazyPagingItems<T>.peekOrNull(index: Int): T? =
     if (index in 0 until itemCount) peek(index) else null
-
-/** Placeholder where the composer lands in M3, on the same glass as the headers. */
-@Composable
-private fun ReadOnlyBar(modifier: Modifier = Modifier) {
-    val colors = ObsidianTheme.colors
-    Box(
-        modifier
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(bottom = ObSpacing.M)
-            .clip(CircleShape)
-            .glassEffect(colors.navScrim)
-            .background(colors.border)
-            .padding(horizontal = ObSpacing.L, vertical = ObSpacing.S),
-    ) {
-        Text(
-            "Read-only · replying arrives in the next update",
-            style = ObsidianTheme.typography.label,
-            color = colors.textSecondary,
-        )
-    }
-}

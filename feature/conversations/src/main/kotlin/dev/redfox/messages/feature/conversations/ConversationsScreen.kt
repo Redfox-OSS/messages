@@ -37,6 +37,7 @@ import dev.redfox.messages.core.ui.components.TabPage
 import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.obsidian.components.ChoicePill
 import dev.redfox.obsidian.components.EmptyState
+import dev.redfox.obsidian.components.ObFab
 import dev.redfox.obsidian.components.PrimaryButton
 import dev.redfox.obsidian.effects.glassSource
 import dev.redfox.obsidian.motion.ObMotion
@@ -66,6 +67,7 @@ private val AccessPermissions = arrayOf(Manifest.permission.READ_SMS, Manifest.p
 @Composable
 fun ConversationsRoute(
     onOpenThread: (threadId: Long) -> Unit,
+    onNewConversation: () -> Unit,
     viewModel: ConversationsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -80,13 +82,19 @@ fun ConversationsRoute(
             ConversationsEffect.RequestSmsAccess -> permissions.launch(AccessPermissions)
         }
     }
-    ConversationsScreen(state = state, conversations = conversations, onIntent = viewModel::dispatch)
+    ConversationsScreen(
+        state = state,
+        conversations = conversations,
+        onNewConversation = onNewConversation,
+        onIntent = viewModel::dispatch,
+    )
 }
 
 @Composable
 fun ConversationsScreen(
     state: ConversationsState,
     conversations: LazyPagingItems<ConversationItem>,
+    onNewConversation: () -> Unit,
     onIntent: (ConversationsIntent) -> Unit,
 ) {
     val settled = conversations.loadState.refresh is LoadState.NotLoading && !state.isIndexing
@@ -128,6 +136,18 @@ fun ConversationsScreen(
                             .then(if (index < RevealedRows) Modifier.revealOnEnter(index + 1) else Modifier),
                     )
                 }
+            }
+        }
+        if (state.hasSmsAccess) {
+            Box(Modifier.fillMaxSize()) {
+                ObFab(
+                    icon = R.drawable.ic_edit_square,
+                    contentDescription = "New conversation",
+                    onClick = onNewConversation,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = ScreenGutter, bottom = padding.calculateBottomPadding()),
+                )
             }
         }
     }

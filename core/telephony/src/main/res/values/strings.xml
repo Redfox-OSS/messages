@@ -2,6 +2,18 @@
 <resources>
     <string name="channel_incoming_messages">Incoming messages</string>
     <string name="channel_incoming_messages_description">New SMS and MMS</string>
+    <string name="channel_otp">One-time codes</string>
+    <string name="channel_otp_description">Shows a verification code for 5 seconds so you can copy it</string>
+    <string name="notification_otp_title">%1$s OTP</string>
+    <string name="notification_otp_subtext">Tap to copy</string>
+    <string name="notification_otp_public_title">Verification code received</string>
+    <string name="notification_otp_copy">Copy %1$s</string>
+    <string name="notification_otp_copy_short">Copy</string>
+    <string name="notification_reply">Reply</string>
+    <string name="notification_reply_hint">Message</string>
+    <string name="notification_mark_read">Mark as read</string>
+    <string name="notification_send_failed_title">Message not sent</string>
+    <string name="notification_send_failed_text">To %1$s. Open the conversation to try again.</string>
     <string name="notification_mms_title">Multimedia message received</string>
     <string name="notification_mms_text">MMS support is not ready yet. The message is still on your carrier\'s server.</string>
 </resources>

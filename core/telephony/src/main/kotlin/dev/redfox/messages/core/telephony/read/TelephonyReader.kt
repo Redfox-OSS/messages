@@ -11,6 +11,7 @@ import androidx.core.net.toUri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.redfox.messages.core.model.Attachment
 import dev.redfox.messages.core.model.Contact
+import dev.redfox.messages.core.model.DeliveryStatus
 import dev.redfox.messages.core.model.Message
 import dev.redfox.messages.core.model.MessageBox
 import dev.redfox.messages.core.model.MessageKind
@@ -239,6 +240,7 @@ class TelephonyReader @Inject constructor(
                 TextBasedSmsColumns.TYPE,
                 TextBasedSmsColumns.READ,
                 TextBasedSmsColumns.SUBSCRIPTION_ID,
+                TextBasedSmsColumns.STATUS,
             ),
             keyset("${TextBasedSmsColumns.THREAD_ID} = ?", TextBasedSmsColumns.DATE, Telephony.Sms._ID, before),
             keysetArgs(threadId, before),
@@ -257,10 +259,20 @@ class TelephonyReader @Inject constructor(
                     timestamp = c.long(TextBasedSmsColumns.DATE),
                     isRead = c.int(TextBasedSmsColumns.READ) == 1,
                     subscriptionId = c.int(TextBasedSmsColumns.SUBSCRIPTION_ID),
+                    deliveryStatus = if (box == MessageBox.Inbox) DeliveryStatus.None
+                    else deliveryStatus(c.intOrNull(TextBasedSmsColumns.STATUS) ?: TextBasedSmsColumns.STATUS_NONE),
                 )
             }
         }
         return out
+    }
+
+    /** SMS `status`: -1 none requested, 0 delivered, 32 pending, 64 failed. */
+    private fun deliveryStatus(status: Int) = when {
+        status == TextBasedSmsColumns.STATUS_COMPLETE -> DeliveryStatus.Delivered
+        status >= TextBasedSmsColumns.STATUS_FAILED -> DeliveryStatus.Failed
+        status >= TextBasedSmsColumns.STATUS_PENDING -> DeliveryStatus.Pending
+        else -> DeliveryStatus.None
     }
 
     private fun readMms(threadId: Long, before: Position?, max: Int): List<Message> {
@@ -449,5 +461,7 @@ private fun Cursor.string(column: String): String? =
 private fun Cursor.long(column: String): Long =
     getColumnIndex(column).takeIf { it >= 0 && !isNull(it) }?.let(::getLong) ?: 0L
 
-private fun Cursor.int(column: String): Int =
-    getColumnIndex(column).takeIf { it >= 0 && !isNull(it) }?.let(::getInt) ?: 0
+private fun Cursor.int(column: String): Int = intOrNull(column) ?: 0
+
+private fun Cursor.intOrNull(column: String): Int? =
+    getColumnIndex(column).takeIf { it >= 0 && !isNull(it) }?.let(::getInt)

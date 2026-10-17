@@ -12,6 +12,7 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dev.redfox.messages.core.common.ApplicationScope
 import dev.redfox.messages.core.common.Dispatcher
 import dev.redfox.messages.core.common.MessagesDispatcher
 import dev.redfox.messages.core.contacts.ContactResolver
@@ -23,11 +24,16 @@ import dev.redfox.messages.core.model.Conversation
 import dev.redfox.messages.core.model.Message
 import dev.redfox.messages.core.model.MessageCategory
 import dev.redfox.messages.core.model.SyncStatus
+import dev.redfox.messages.core.telephony.IncomingMessageNotifier
+import dev.redfox.messages.core.telephony.SmsProviderWriter
+import dev.redfox.messages.core.telephony.send.SmsSender
 import dev.redfox.messages.core.telephony.read.MessagePageKey
 import dev.redfox.messages.core.telephony.read.ProviderChanges
 import dev.redfox.messages.core.telephony.read.TelephonyReader
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -47,10 +53,39 @@ internal class MessagesRepositoryImpl @Inject constructor(
     private val reader: TelephonyReader,
     private val contacts: ContactResolver,
     private val changes: ProviderChanges,
+    private val sender: SmsSender,
+    private val writer: SmsProviderWriter,
+    private val notifier: IncomingMessageNotifier,
+    @param:ApplicationScope private val appScope: CoroutineScope,
     @param:Dispatcher(MessagesDispatcher.IO) private val io: CoroutineDispatcher,
 ) : MessagesRepository {
 
-    override fun startSync() = indexer.start()
+    override fun startSync() {
+        indexer.start()
+        appScope.launch(io) {
+            // Sends interrupted by a process death would otherwise say "Sending…" forever.
+            runCatching { writer.failStaleOutbox(olderThanMillis = STALE_OUTBOX_MILLIS) }
+                .onFailure { Log.w(TAG, "Couldn't check the outbox", it) }
+        }
+    }
+
+    override suspend fun sendSms(addresses: List<String>, body: String, subscriptionId: Int) = withContext(io) {
+        addresses.forEach { sender.send(it, body, subscriptionId) }
+    }
+
+    override suspend fun retry(message: Message) = withContext(io) { sender.retry(message.id) }
+
+    override suspend fun markRead(threadId: Long) = withContext(io) {
+        try {
+            writer.markThreadRead(threadId)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Couldn't mark thread read", e)
+        }
+        dao.observe(threadId).first()?.let { notifier.cancelFor(ParticipantCodec.decode(it.participants).map { p -> p.address }) }
+        Unit
+    }
+
+    override suspend fun threadIdFor(addresses: List<String>): Long = withContext(io) { writer.threadIdFor(addresses.toSet()) }
 
     override fun observeSyncStatus(): Flow<SyncStatus> = indexer.status
 
@@ -112,6 +147,9 @@ internal class MessagesRepositoryImpl @Inject constructor(
 
     private companion object {
         const val TAG = "MessagesRepository"
+
+        /** Radios report back within seconds; anything older that's still "sending" never will. */
+        const val STALE_OUTBOX_MILLIS = 3 * 60_000L
 
         /** Rows are tiny; a generous prefetch keeps fast flings from ever reaching the end of loaded data. */
         val InboxPaging = PagingConfig(pageSize = 40, prefetchDistance = 20, initialLoadSize = 60, enablePlaceholders = false)

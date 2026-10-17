@@ -9,7 +9,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import dev.redfox.messages.core.model.DeliveryStatus
+import dev.redfox.obsidian.effects.pressable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -48,6 +52,8 @@ fun MessageBubble(
     timeLabel: String?,
     showSenderName: Boolean,
     modifier: Modifier = Modifier,
+    /** Shown as "Tap to retry" on a failed message when set. */
+    onRetry: (() -> Unit)? = null,
 ) {
     val colors = ObsidianTheme.colors
     val type = ObsidianTheme.typography
@@ -94,20 +100,41 @@ fun MessageBubble(
                 message.body.isNotEmpty() -> LinkifiedText(message.body, style = type.body, color = colors.textPrimary)
             }
         }
-        if (timeLabel != null || failed) {
+        val sending = message.box == MessageBox.Outbox || message.box == MessageBox.Queued
+        if (timeLabel != null || failed || sending) {
+            val retry = if (failed && onRetry != null) {
+                Modifier.pressable(haptic = HapticFeedbackType.ContextClick, onClick = onRetry)
+            } else Modifier
             Row(
-                Modifier.padding(top = ObSpacing.XXS, start = ObSpacing.S, end = ObSpacing.S),
+                retry.padding(top = ObSpacing.XXS, start = ObSpacing.S, end = ObSpacing.S),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ObSpacing.XXS),
             ) {
+                if (failed) {
+                    Icon(
+                        painterResource(R.drawable.ic_error),
+                        contentDescription = null,
+                        tint = colors.error,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
                 Text(
-                    if (failed) "Not sent" + (timeLabel?.let { " · $it" } ?: "") else timeLabel.orEmpty(),
+                    statusCaption(message, timeLabel, canRetry = onRetry != null),
                     style = type.caption,
                     color = if (failed) colors.error else colors.textTertiary,
                 )
             }
         }
     }
+}
+
+/** "Sending…", "Not sent · Tap to retry", "10:42 · Delivered", or just the time. */
+private fun statusCaption(message: Message, timeLabel: String?, canRetry: Boolean): String = when {
+    message.box == MessageBox.Failed -> if (canRetry) "Not sent · Tap to retry" else "Not sent"
+    message.box == MessageBox.Outbox || message.box == MessageBox.Queued -> "Sending…"
+    message.isOutgoing && message.deliveryStatus == DeliveryStatus.Delivered ->
+        listOfNotNull(timeLabel, "Delivered").joinToString(" · ")
+    else -> timeLabel.orEmpty()
 }
 
 @Composable

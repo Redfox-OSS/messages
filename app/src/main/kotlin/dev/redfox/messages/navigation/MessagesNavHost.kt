@@ -26,6 +26,8 @@ import dev.redfox.messages.feature.starred.StarredKey
 import dev.redfox.messages.feature.starred.StarredRoute
 import dev.redfox.messages.feature.thread.ThreadKey
 import dev.redfox.messages.feature.thread.ThreadRoute
+import dev.redfox.messages.feature.thread.newchat.NewConversationKey
+import dev.redfox.messages.feature.thread.newchat.NewConversationRoute
 import dev.redfox.obsidian.motion.ObMotion
 import dev.redfox.obsidian.motion.RevealScope
 import dev.redfox.obsidian.showcase.ObsidianShowcase
@@ -61,11 +63,26 @@ fun MessagesNavHost(
             }
             entry<ConversationsKey> { key ->
                 Reveal(navigator, key) {
-                    ConversationsRoute(onOpenThread = { navigator.navigate(ThreadKey(it)) })
+                    ConversationsRoute(
+                        onOpenThread = { navigator.navigate(ThreadKey(it)) },
+                        onNewConversation = { navigator.navigate(NewConversationKey()) },
+                    )
                 }
             }
             entry<ThreadKey> { key ->
                 Reveal(navigator, key) { ThreadRoute(key = key, onBack = { navigator.back() }) }
+            }
+            entry<NewConversationKey> { key ->
+                Reveal(navigator, key) {
+                    NewConversationRoute(
+                        onBack = { navigator.back() },
+                        onOpenThread = { threadId, address, title ->
+                            navigator.replaceCurrent(
+                                ThreadKey(threadId, addresses = listOf(address), title = title, draft = key.draft)
+                            )
+                        },
+                    )
+                }
             }
             entry<StarredKey> { key ->
                 Reveal(navigator, key) { StarredRoute() }

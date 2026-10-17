@@ -68,11 +68,25 @@ data class Message(
     val isPendingDownload: Boolean = false,
     /** A business chatbot card (RCS Business Messaging) stored alongside SMS/MMS, already parsed. */
     val rich: RichContent? = null,
+    /** Delivery report for an outgoing SMS; [DeliveryStatus.None] when none was requested. */
+    val deliveryStatus: DeliveryStatus = DeliveryStatus.None,
 ) {
     /** SMS and MMS ids come from different tables and can collide. */
     val key: String get() = "${kind.name}-$id"
     val isOutgoing: Boolean get() = box.isOutgoing
 }
+
+/** The recipient's handset report for an outgoing SMS. */
+enum class DeliveryStatus { None, Pending, Delivered, Failed }
+
+/** An active SIM that can send messages. */
+data class SimCard(
+    val subscriptionId: Int,
+    /** The carrier or user-given name ("Jio", "BSNL Mobile"). */
+    val label: String,
+    /** 0-based physical slot, for "SIM 1" / "SIM 2" badges. */
+    val slotIndex: Int,
+)
 
 /** Progress of indexing the system SMS store into the app's inbox index. */
 data class SyncStatus(

@@ -38,6 +38,25 @@ class Navigator(val backStack: NavBackStack<NavKey>) {
         if (key != ConversationsKey) backStack.add(key)
     }
 
+    /** Swaps the current destination for [key], e.g. the recipient picker for the chosen thread. */
+    fun replaceCurrent(key: NavKey) {
+        uncovered.remove(key)
+        if (backStack.isNotEmpty()) backStack.removeAt(backStack.lastIndex)
+        backStack.add(key)
+    }
+
+    /**
+     * Opens a conversation from outside the app (a notification, another app's "send SMS"):
+     * the inbox underneath it, whatever was open before, so back always lands in the inbox.
+     */
+    fun openFromOutside(key: NavKey) {
+        if (current == key) return
+        uncovered.remove(key)
+        backStack.clear()
+        backStack.add(ConversationsKey)
+        backStack.add(key)
+    }
+
     /** Replaces the whole stack, e.g. when onboarding finishes. */
     fun resetTo(key: NavKey) {
         uncovered.remove(key)
