@@ -69,7 +69,7 @@ class TelephonyReader @Inject constructor(
      * ignores `?simple=true` and drops `recipient_ids`), while the per-message tables have the
      * same shape everywhere. Two light passes plus a snippet lookup for the newest message only.
      */
-    fun readThreads(): List<RawThread> {
+    fun readThreads(onProgress: (Float) -> Unit = {}): List<RawThread> {
         val threads = LinkedHashMap<Long, ThreadAcc>()
 
         resolver.query(
@@ -86,7 +86,9 @@ class TelephonyReader @Inject constructor(
             val date = c.getColumnIndexOrThrow(TextBasedSmsColumns.DATE)
             val read = c.getColumnIndexOrThrow(TextBasedSmsColumns.READ)
             val type = c.getColumnIndexOrThrow(TextBasedSmsColumns.TYPE)
+            val total = c.count.coerceAtLeast(1)
             while (c.moveToNext()) {
+                if (c.position % PROGRESS_STEP == 0) onProgress(SMS_SHARE * c.position / total)
                 val acc = threads.getOrPut(c.getLong(tid)) { ThreadAcc() }
                 acc.count++
                 if (acc.latestDate == 0L) { // Sorted newest first: the first row is the latest.
@@ -110,7 +112,9 @@ class TelephonyReader @Inject constructor(
             val date = c.getColumnIndexOrThrow(BaseMmsColumns.DATE)
             val read = c.getColumnIndexOrThrow(BaseMmsColumns.READ)
             val box = c.getColumnIndexOrThrow(BaseMmsColumns.MESSAGE_BOX)
+            val total = c.count.coerceAtLeast(1)
             while (c.moveToNext()) {
+                if (c.position % PROGRESS_STEP == 0) onProgress(SMS_SHARE + MMS_SHARE * c.position / total)
                 val acc = threads.getOrPut(c.getLong(tid)) { ThreadAcc() }
                 val millis = c.getLong(date) * 1000 // MMS dates are in seconds.
                 acc.count++
@@ -129,8 +133,10 @@ class TelephonyReader @Inject constructor(
             acc.latestMmsId?.let { acc.addresses += readMmsParticipants(it) }
         }
 
+        onProgress(SMS_SHARE + MMS_SHARE)
         val smsSnippets = readSmsBodies(threads.values.filter { !it.latestIsMms }.mapNotNull { it.latestSmsId })
         val mmsSnippets = readParts(threads.values.filter { it.latestIsMms }.mapNotNull { it.latestMmsId })
+        onProgress(1f)
 
         return threads.entries
             .map { (threadId, acc) ->
@@ -456,6 +462,10 @@ class TelephonyReader @Inject constructor(
     private companion object {
         val MMS_PARTS: Uri = "content://mms/part".toUri()
         const val MESSAGE_TYPE_NOTIFICATION_IND = 130
+        /** readThreads progress: rows between callbacks, and each table's share of the scan. */
+        const val PROGRESS_STEP = 250
+        const val SMS_SHARE = 0.7f
+        const val MMS_SHARE = 0.15f
         /** X-Mms-Response-Status "Ok"; anything above is an error (OMA MMS ENC §7.3.48). */
         const val RESPONSE_STATUS_OK = 0x80
         const val STALE_MMS_SEND_MILLIS = 10 * 60_000L

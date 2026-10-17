@@ -110,4 +110,6 @@ data class SyncStatus(
     val isSyncing: Boolean = false,
     /** False until the first full pass finishes — an empty inbox before that means "loading". */
     val hasCompletedOnce: Boolean = false,
+    /** 0–1 through the current pass, while [isSyncing]. */
+    val progress: Float = 0f,
 )

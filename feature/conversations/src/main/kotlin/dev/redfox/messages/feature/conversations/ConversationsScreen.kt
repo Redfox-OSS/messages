@@ -37,6 +37,7 @@ import dev.redfox.messages.core.model.Conversation
 import dev.redfox.messages.core.model.SwipeAction
 import dev.redfox.messages.core.ui.components.ConversationRow
 import dev.redfox.messages.core.ui.components.SwipeActionRow
+import dev.redfox.messages.core.ui.components.SyncProgressBar
 import dev.redfox.messages.core.ui.components.SwipeVisual
 import dev.redfox.messages.core.ui.platform.rememberCaller
 import dev.redfox.obsidian.components.ObAlertDialog
@@ -159,6 +160,12 @@ fun ConversationsScreen(
                 }
             }
         }
+        // Only the first sync into an empty inbox is worth showing; quick re-syncs stay silent.
+        SyncProgressBar(
+            visible = state.hasSmsAccess && state.isIndexing && conversations.itemCount == 0,
+            progress = state.syncProgress,
+            modifier = Modifier.padding(top = padding.calculateTopPadding() - ObSpacing.S),
+        )
         state.confirmDelete?.let { conversation ->
             ObAlertDialog(
                 title = "Delete conversation?",

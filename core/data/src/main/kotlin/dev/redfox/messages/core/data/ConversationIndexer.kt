@@ -54,13 +54,14 @@ internal class ConversationIndexer @Inject constructor(
     }
 
     private suspend fun syncOnce() {
-        _status.update { it.copy(isSyncing = true) }
+        _status.update { it.copy(isSyncing = true, progress = 0f) }
         try {
             val prefs = prefsDao.all().associateBy { it.threadId }
             val (snapshot, took) = measureTimedValue { buildSnapshot(prefs) }
+            report(WRITE_START)
             val wrote = dao.sync(snapshot)
             Log.d(TAG, "Indexed ${snapshot.size} conversations in $took (changed=$wrote)")
-            _status.update { SyncStatus(isSyncing = false, hasCompletedOnce = true) }
+            _status.update { SyncStatus(isSyncing = false, hasCompletedOnce = true, progress = 1f) }
         } catch (e: SecurityException) {
             Log.w(TAG, "SMS store not readable: ${e.message}")
             _status.update { it.copy(isSyncing = false) }
@@ -71,9 +72,18 @@ internal class ConversationIndexer @Inject constructor(
         }
     }
 
+    /** Progress for the UI, in coarse steps so the bar animates without a flood of updates. */
+    private fun report(progress: Float) {
+        _status.update { current ->
+            if (progress - current.progress < MIN_PROGRESS_STEP && progress < 1f) current else current.copy(progress = progress)
+        }
+    }
+
     private fun buildSnapshot(prefs: Map<Long, ConversationPrefsEntity>): List<ConversationEntity> {
-        val threads = reader.readThreads()
+        // Reading the store is most of the work; then contacts, then writing the index.
+        val threads = reader.readThreads { report(it * READ_SHARE) }
         val people = contacts.resolveAll(threads.flatMap { it.addresses })
+        report(READ_SHARE + CONTACTS_SHARE)
         return threads.map { t ->
             // One person can appear as "+919876543210" and "09876543210" in the same thread.
             val participants = t.addresses.mapNotNull(people::get).distinctBy { it.address.matchKey() }
@@ -94,6 +104,10 @@ internal class ConversationIndexer @Inject constructor(
 
     private companion object {
         const val TAG = "ConversationIndexer"
+        const val READ_SHARE = 0.75f
+        const val CONTACTS_SHARE = 0.15f
+        const val WRITE_START = READ_SHARE + CONTACTS_SHARE
+        const val MIN_PROGRESS_STEP = 0.02f
     }
 }
 

@@ -51,7 +51,7 @@ class ConversationsViewModel @Inject constructor(
 
     init {
         filter.bind { copy(filter = it) }
-        observeSyncStatus().bind { copy(isIndexing = !it.hasCompletedOnce) }
+        observeSyncStatus().bind { copy(isIndexing = !it.hasCompletedOnce, syncProgress = it.progress) }
         observeSettings().bind { copy(swipeLeft = it.swipeLeft, swipeRight = it.swipeRight) }
         checkAccess()
     }

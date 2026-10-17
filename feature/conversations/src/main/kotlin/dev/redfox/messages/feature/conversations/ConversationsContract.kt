@@ -22,6 +22,8 @@ data class ConversationsState(
     val filter: InboxFilter = InboxFilter.All,
     /** True until the first index pass completes; an empty list before that means "loading". */
     val isIndexing: Boolean = true,
+    /** 0–1 through the current sync pass. */
+    val syncProgress: Float = 0f,
     val swipeLeft: SwipeAction = SwipeAction.Archive,
     val swipeRight: SwipeAction = SwipeAction.ToggleRead,
     /** A conversation waiting for "Delete?" confirmation. */
