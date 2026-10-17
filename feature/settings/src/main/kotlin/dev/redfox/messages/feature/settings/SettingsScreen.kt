@@ -28,7 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavKey
 import dev.redfox.messages.core.ui.R
 import dev.redfox.messages.core.ui.components.AccentSwatchRow
-import dev.redfox.messages.core.ui.components.TabPage
+import dev.redfox.messages.core.ui.components.DetailPage
 import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.obsidian.components.ObCard
 import dev.redfox.obsidian.components.ObDivider
@@ -47,6 +47,7 @@ data object SettingsKey : NavKey
 @Composable
 fun SettingsRoute(
     versionLabel: String,
+    onBack: () -> Unit,
     onOpenDesignShowcase: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -57,16 +58,17 @@ fun SettingsRoute(
             SettingsEffect.OpenDesignShowcase -> onOpenDesignShowcase()
         }
     }
-    SettingsScreen(state = state, versionLabel = versionLabel, onIntent = viewModel::dispatch)
+    SettingsScreen(state = state, versionLabel = versionLabel, onBack = onBack, onIntent = viewModel::dispatch)
 }
 
 @Composable
 fun SettingsScreen(
     state: SettingsState,
     versionLabel: String,
+    onBack: () -> Unit,
     onIntent: (SettingsIntent) -> Unit,
 ) {
-    TabPage(title = "Settings") { padding ->
+    DetailPage(title = "Settings", onBack = onBack) { padding ->
         RevealColumn(
             modifier = Modifier
                 .glassSource()

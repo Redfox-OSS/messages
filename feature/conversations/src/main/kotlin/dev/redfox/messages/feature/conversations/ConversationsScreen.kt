@@ -46,7 +46,7 @@ import dev.redfox.messages.core.ui.components.TabPage
 import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.obsidian.components.ChoicePill
 import dev.redfox.obsidian.components.EmptyState
-import dev.redfox.obsidian.components.ObFab
+import dev.redfox.obsidian.components.HeaderIconButton
 import dev.redfox.obsidian.components.PrimaryButton
 import dev.redfox.obsidian.effects.glassSource
 import dev.redfox.obsidian.motion.ObMotion
@@ -77,7 +77,7 @@ private val AccessPermissions = arrayOf(Manifest.permission.READ_SMS, Manifest.p
 @Composable
 fun ConversationsRoute(
     onOpenThread: (threadId: Long) -> Unit,
-    onNewConversation: () -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: ConversationsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -97,7 +97,7 @@ fun ConversationsRoute(
     ConversationsScreen(
         state = state,
         conversations = conversations,
-        onNewConversation = onNewConversation,
+        onOpenSettings = onOpenSettings,
         onIntent = viewModel::dispatch,
     )
 }
@@ -106,11 +106,14 @@ fun ConversationsRoute(
 fun ConversationsScreen(
     state: ConversationsState,
     conversations: LazyPagingItems<ConversationItem>,
-    onNewConversation: () -> Unit,
+    onOpenSettings: () -> Unit,
     onIntent: (ConversationsIntent) -> Unit,
 ) {
     val settled = conversations.loadState.refresh is LoadState.NotLoading && !state.isIndexing
-    TabPage(title = "Messages") { padding ->
+    TabPage(
+        title = "Messages",
+        actions = { HeaderIconButton(R.drawable.ic_settings, contentDescription = "Settings", onClick = onOpenSettings) },
+    ) { padding ->
         when {
             !state.hasSmsAccess -> AccessPrompt(padding, onIntent)
             else -> LazyColumn(
@@ -178,18 +181,6 @@ fun ConversationsScreen(
                 onConfirm = { onIntent(ConversationsIntent.ConfirmDelete) },
                 onDismiss = { onIntent(ConversationsIntent.CancelDelete) },
             )
-        }
-        if (state.hasSmsAccess) {
-            Box(Modifier.fillMaxSize()) {
-                ObFab(
-                    icon = R.drawable.ic_edit_square,
-                    contentDescription = "New conversation",
-                    onClick = onNewConversation,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = ScreenGutter, bottom = padding.calculateBottomPadding()),
-                )
-            }
         }
     }
 }

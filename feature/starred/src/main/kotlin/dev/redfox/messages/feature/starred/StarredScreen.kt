@@ -19,14 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation3.runtime.NavKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.redfox.messages.core.domain.usecase.ObserveStarredUseCase
 import dev.redfox.messages.core.domain.usecase.UnstarUseCase
 import dev.redfox.messages.core.model.StarredMessage
 import dev.redfox.messages.core.ui.R
 import dev.redfox.messages.core.ui.components.LinkifiedText
-import dev.redfox.messages.core.ui.components.TabPage
 import dev.redfox.messages.core.ui.format.TimeFormat
 import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.messages.core.ui.mvi.MviViewModel
@@ -45,11 +43,7 @@ import dev.redfox.obsidian.theme.ScreenGutter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.serialization.Serializable
 import javax.inject.Inject
-
-@Serializable
-data object StarredKey : NavKey
 
 @Immutable
 data class StarredItem(val message: StarredMessage, val timeLabel: String)
@@ -96,8 +90,10 @@ class StarredViewModel @Inject constructor(
     }
 }
 
+/** Starred messages as a page of the Saved tab: the list only, under the caller's header. */
 @Composable
-fun StarredRoute(
+fun StarredPage(
+    contentPadding: PaddingValues,
     onOpenThread: (threadId: Long) -> Unit,
     viewModel: StarredViewModel = hiltViewModel(),
 ) {
@@ -107,12 +103,12 @@ fun StarredRoute(
             is StarredEffect.OpenThread -> onOpenThread(effect.threadId)
         }
     }
-    StarredScreen(state, viewModel::dispatch)
+    StarredScreen(state, contentPadding, viewModel::dispatch)
 }
 
 @Composable
-fun StarredScreen(state: StarredState, onIntent: (StarredIntent) -> Unit) {
-    TabPage(title = "Starred") { padding ->
+fun StarredScreen(state: StarredState, padding: PaddingValues, onIntent: (StarredIntent) -> Unit) {
+    run {
         if (state.loaded && state.items.isEmpty()) {
             Box(Modifier.glassSource().fillMaxSize().padding(padding)) {
                 EmptyState(

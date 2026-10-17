@@ -38,6 +38,9 @@ import dev.redfox.messages.core.ui.theme.toAppAccent
 import dev.redfox.messages.feature.conversations.ConversationsKey
 import dev.redfox.messages.feature.onboarding.OnboardingKey
 import dev.redfox.messages.navigation.MessagesNavHost
+import dev.redfox.messages.navigation.NewMessageItem
+import dev.redfox.messages.navigation.SearchItem
+import dev.redfox.messages.navigation.SearchKey
 import dev.redfox.messages.navigation.TabItems
 import dev.redfox.messages.navigation.Tabs
 import dev.redfox.messages.navigation.rememberNavigator
@@ -163,6 +166,10 @@ private fun MessagesShell(
                 selectedIndex = selectedTab,
                 onSelect = { navigator.selectTab(Tabs[it].key) },
                 compact = compactNav,
+                action = NewMessageItem,
+                onAction = { navigator.navigate(NewConversationKey()) },
+                pill = SearchItem,
+                onPill = { navigator.navigate(SearchKey) },
             )
         }
     }

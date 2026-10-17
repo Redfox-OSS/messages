@@ -9,6 +9,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -80,9 +81,15 @@ fun CompactFloatingNavBar(
     /** A State, not a Boolean, so only the bar (not its caller) recomposes when it flips. */
     compact: State<Boolean>,
     modifier: Modifier = Modifier,
+    /** A plain action at the end of the bar (e.g. new message): never selected, no halo. */
+    action: FloatingNavItem? = null,
+    onAction: () -> Unit = {},
+    /** A separate accented round button beside the bar (e.g. search). */
+    pill: FloatingNavItem? = null,
+    onPill: () -> Unit = {},
 ) {
     val colors = ObsidianTheme.colors
-    val count = items.size.coerceAtLeast(1)
+    val slots = (items.size + if (action != null) 1 else 0).coerceAtLeast(1)
     val shrink = animateFloatAsState(if (compact.value) 1f else 0f, ObMotion.gentle(), label = "navCompact")
 
     val position = remember { Animatable(selectedIndex.coerceAtLeast(0).toFloat()) }
@@ -97,39 +104,88 @@ fun CompactFloatingNavBar(
             .padding(start = ScreenGutter, end = ScreenGutter, bottom = BottomGap),
         contentAlignment = Alignment.BottomCenter,
     ) {
-        val fullWidth = minOf(maxWidth, MaxWidth)
-        Box(
-            Modifier
-                .layout { measurable, constraints ->
-                    val t = shrink.value
-                    val slotHeight = FullHeight.roundToPx()
-                    val compactWidth = (CompactSlot * count + InnerPadding * 2).toPx()
-                    val width = lerp(fullWidth.toPx(), compactWidth, t).roundToInt()
-                    val height = lerp(FullHeight.toPx(), CompactHeight.toPx(), t).roundToInt()
-                    val placeable = measurable.measure(Constraints.fixed(width, height))
-                    // Fixed full-height slot; the capsule is centred and sits on its bottom edge.
-                    layout(constraints.maxWidth, slotHeight) {
-                        placeable.place((constraints.maxWidth - width) / 2, slotHeight - height)
+        val pillRoom = if (pill != null) FullHeight + PillGap else 0.dp
+        val fullWidth = minOf(maxWidth - pillRoom, MaxWidth)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(PillGap, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Box(
+                Modifier
+                    .layout { measurable, _ ->
+                        val t = shrink.value
+                        val slotHeight = FullHeight.roundToPx()
+                        val compactWidth = (CompactSlot * slots + InnerPadding * 2).toPx()
+                        val width = lerp(fullWidth.toPx(), compactWidth, t).roundToInt()
+                        val height = lerp(FullHeight.toPx(), CompactHeight.toPx(), t).roundToInt()
+                        val placeable = measurable.measure(Constraints.fixed(width, height))
+                        // Fixed full-height slot; the capsule sits on its bottom edge.
+                        layout(width, slotHeight) { placeable.place(0, slotHeight - height) }
+                    }
+                    .glow(Color.Black, CircleShape, ObGlows.Elevation)
+                    .clip(CircleShape)
+                    .glassEffect(colors.navScrim)
+                    .border(1.dp, colors.borderStrong, CircleShape)
+                    .padding(horizontal = InnerPadding),
+            ) {
+                if (selectedIndex >= 0) LiquidHalo(position, slots, shrink)
+                Row(Modifier.fillMaxWidth().fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
+                    items.forEachIndexed { index, item ->
+                        NavItem(
+                            item = item,
+                            selected = index == selectedIndex,
+                            onClick = { onSelect(index) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (action != null) {
+                        NavItem(item = action, selected = false, onClick = onAction, isAction = true, modifier = Modifier.weight(1f))
                     }
                 }
-                .glow(Color.Black, CircleShape, ObGlows.Elevation)
-                .clip(CircleShape)
-                .glassEffect(colors.navScrim)
-                .border(1.dp, colors.borderStrong, CircleShape)
-                .padding(horizontal = InnerPadding),
-        ) {
-            if (selectedIndex >= 0) LiquidHalo(position, count, shrink)
-            Row(Modifier.fillMaxWidth().fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
-                items.forEachIndexed { index, item ->
-                    NavItem(
-                        item = item,
-                        selected = index == selectedIndex,
-                        onClick = { onSelect(index) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
             }
+            if (pill != null) AccentPill(pill, shrink, onPill)
         }
+    }
+}
+
+/** The separate round button: Obsidian's accent action (solid accent, soft glow), shrinking with the bar. */
+@Composable
+private fun AccentPill(item: FloatingNavItem, shrink: State<Float>, onClick: () -> Unit) {
+    val colors = ObsidianTheme.colors
+    val haptics = LocalHapticFeedback.current
+    val motion = remember { IconMotion() }
+    var plays by remember { mutableIntStateOf(0) }
+    LaunchedEffect(plays) { if (plays > 0) motion.play(item.motion) }
+    Box(
+        Modifier
+            .layout { measurable, _ ->
+                val slotHeight = FullHeight.roundToPx()
+                val size = lerp(FullHeight.toPx(), CompactHeight.toPx(), shrink.value).roundToInt()
+                val placeable = measurable.measure(Constraints.fixed(size, size))
+                layout(size, slotHeight) { placeable.place(0, slotHeight - size) }
+            }
+            .glow(colors.accent, CircleShape, ObGlows.Action)
+            .clip(CircleShape)
+            .background(colors.accent)
+            .semantics { role = Role.Button }
+            .pressable(pressedScale = 0.88f) {
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                plays++
+                onClick()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(item.icon),
+            contentDescription = item.label,
+            tint = colors.onAccent,
+            modifier = Modifier.graphicsLayer {
+                scaleX = motion.scale.value * motion.squashX
+                scaleY = motion.scale.value * motion.squashY
+                rotationZ = motion.rotation.value
+            },
+        )
     }
 }
 
@@ -183,6 +239,8 @@ private fun NavItem(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** An action, not a tab: every tap plays the motion and runs [onClick]. */
+    isAction: Boolean = false,
 ) {
     val colors = ObsidianTheme.colors
     val haptics = LocalHapticFeedback.current
@@ -206,11 +264,24 @@ private fun NavItem(
             .fillMaxHeight()
             .semantics {
                 this.selected = selected
-                role = Role.Tab
+                role = if (isAction) Role.Button else Role.Tab
             }
-            .pressable(pressedScale = 0.86f, role = Role.Tab) {
-                haptics.performHapticFeedback(if (selected) HapticFeedbackType.ContextClick else HapticFeedbackType.SegmentTick)
-                if (selected) plays++ else onClick()
+            .pressable(pressedScale = 0.86f, role = if (isAction) Role.Button else Role.Tab) {
+                when {
+                    isAction -> {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        plays++
+                        onClick()
+                    }
+                    selected -> {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        plays++
+                    }
+                    else -> {
+                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        onClick()
+                    }
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -293,6 +364,8 @@ private class IconMotion {
 private val FullHeight = 64.dp
 private val BottomGap = 12.dp
 private val MaxWidth = 420.dp
+/** Space between the bar and the separate pill. */
+private val PillGap = 10.dp
 private val InnerPadding = 5.dp
 /** Pill height in the full bar: 5dp clear of the 64dp capsule's edges. */
 private val HaloHeight = 54.dp

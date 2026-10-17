@@ -19,14 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation3.runtime.NavKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.redfox.messages.core.domain.usecase.ManageScheduledUseCase
 import dev.redfox.messages.core.domain.usecase.ObserveScheduledUseCase
 import dev.redfox.messages.core.model.ScheduledMessage
 import dev.redfox.messages.core.ui.R
 import dev.redfox.messages.core.ui.components.SchedulePicker
-import dev.redfox.messages.core.ui.components.TabPage
 import dev.redfox.messages.core.ui.components.formatScheduleTime
 import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.messages.core.ui.mvi.MviViewModel
@@ -46,11 +44,7 @@ import dev.redfox.obsidian.theme.ScreenGutter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.serialization.Serializable
 import javax.inject.Inject
-
-@Serializable
-data object ScheduledKey : NavKey
 
 @Immutable
 data class ScheduledState(
@@ -109,8 +103,10 @@ class ScheduledViewModel @Inject constructor(
     }
 }
 
+/** Scheduled messages as a page of the Saved tab: the list only, under the caller's header. */
 @Composable
-fun ScheduledRoute(
+fun ScheduledPage(
+    contentPadding: PaddingValues,
     onOpenThread: (threadId: Long) -> Unit,
     viewModel: ScheduledViewModel = hiltViewModel(),
 ) {
@@ -120,12 +116,12 @@ fun ScheduledRoute(
             is ScheduledEffect.OpenThread -> onOpenThread(effect.threadId)
         }
     }
-    ScheduledScreen(state, viewModel::dispatch)
+    ScheduledScreen(state, contentPadding, viewModel::dispatch)
 }
 
 @Composable
-fun ScheduledScreen(state: ScheduledState, onIntent: (ScheduledIntent) -> Unit) {
-    TabPage(title = "Scheduled") { padding ->
+fun ScheduledScreen(state: ScheduledState, padding: PaddingValues, onIntent: (ScheduledIntent) -> Unit) {
+    run {
         if (state.loaded && state.items.isEmpty()) {
             Box(Modifier.glassSource().fillMaxSize().padding(padding)) {
                 EmptyState(

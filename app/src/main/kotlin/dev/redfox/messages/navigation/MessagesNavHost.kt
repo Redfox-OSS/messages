@@ -18,13 +18,11 @@ import dev.redfox.messages.feature.conversations.ConversationsKey
 import dev.redfox.messages.feature.conversations.ConversationsRoute
 import dev.redfox.messages.feature.onboarding.OnboardingKey
 import dev.redfox.messages.feature.onboarding.OnboardingRoute
-import dev.redfox.messages.feature.scheduled.ScheduledKey
-import dev.redfox.messages.feature.scheduled.ScheduledRoute
 import dev.redfox.messages.feature.settings.SettingsKey
 import dev.redfox.messages.feature.settings.SettingsRoute
-import dev.redfox.messages.feature.starred.StarredKey
-import dev.redfox.messages.feature.starred.StarredRoute
 import dev.redfox.messages.feature.thread.ThreadKey
+import dev.redfox.messages.saved.SavedKey
+import dev.redfox.messages.saved.SavedRoute
 import dev.redfox.messages.feature.thread.ThreadRoute
 import dev.redfox.messages.feature.thread.newchat.NewConversationKey
 import dev.redfox.messages.feature.thread.newchat.NewConversationRoute
@@ -65,7 +63,7 @@ fun MessagesNavHost(
                 Reveal(navigator, key) {
                     ConversationsRoute(
                         onOpenThread = { navigator.navigate(ThreadKey(it)) },
-                        onNewConversation = { navigator.navigate(NewConversationKey()) },
+                        onOpenSettings = { navigator.navigate(SettingsKey) },
                     )
                 }
             }
@@ -84,16 +82,17 @@ fun MessagesNavHost(
                     )
                 }
             }
-            entry<StarredKey> { key ->
-                Reveal(navigator, key) { StarredRoute(onOpenThread = { navigator.navigate(ThreadKey(it)) }) }
+            entry<SavedKey> { key ->
+                Reveal(navigator, key) { SavedRoute(onOpenThread = { navigator.navigate(ThreadKey(it)) }) }
             }
-            entry<ScheduledKey> { key ->
-                Reveal(navigator, key) { ScheduledRoute(onOpenThread = { navigator.navigate(ThreadKey(it)) }) }
+            entry<SearchKey> { key ->
+                Reveal(navigator, key) { SearchPlaceholder(onBack = { navigator.back() }) }
             }
             entry<SettingsKey> { key ->
                 Reveal(navigator, key) {
                     SettingsRoute(
                         versionLabel = versionLabel,
+                        onBack = { navigator.back() },
                         onOpenDesignShowcase = { navigator.navigate(DesignShowcaseKey) },
                     )
                 }
