@@ -38,6 +38,7 @@ internal class ConversationIndexer @Inject constructor(
     private val changes: ProviderChanges,
     private val dao: ConversationDao,
     private val prefsDao: ConversationPrefsDao,
+    private val searchIndexer: SearchIndexer,
     @param:ApplicationScope private val scope: CoroutineScope,
     @param:Dispatcher(MessagesDispatcher.IO) private val io: CoroutineDispatcher,
 ) {
@@ -62,6 +63,8 @@ internal class ConversationIndexer @Inject constructor(
             val wrote = dao.sync(snapshot)
             Log.d(TAG, "Indexed ${snapshot.size} conversations in $took (changed=$wrote)")
             _status.update { SyncStatus(isSyncing = false, hasCompletedOnce = true, progress = 1f) }
+            // The inbox first; search catches up right after, without holding up the sync bar.
+            searchIndexer.sync()
         } catch (e: SecurityException) {
             Log.w(TAG, "SMS store not readable: ${e.message}")
             _status.update { it.copy(isSyncing = false) }

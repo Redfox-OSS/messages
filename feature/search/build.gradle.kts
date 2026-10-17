@@ -9,6 +9,7 @@ android {
 dependencies {
     // BackHandler, to close search with back.
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.paging.compose)
 }
 
 dependencies {

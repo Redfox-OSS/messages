@@ -1,10 +1,12 @@
 package dev.redfox.messages.core.domain.repository
 
+import androidx.paging.PagingData
 import dev.redfox.messages.core.model.AppAccent
 import dev.redfox.messages.core.model.AppSettings
 import dev.redfox.messages.core.model.DeviceSetupStatus
 import dev.redfox.messages.core.model.Message
 import dev.redfox.messages.core.model.ScheduledMessage
+import dev.redfox.messages.core.model.SearchHit
 import dev.redfox.messages.core.model.SearchResults
 import dev.redfox.messages.core.model.StarredMessage
 import dev.redfox.messages.core.model.SwipeAction
@@ -47,6 +49,9 @@ interface DeviceSetupRepository {
 }
 
 interface SearchRepository {
-    /** Conversations whose names or numbers contain [query], and messages whose text does, newest first. */
-    suspend fun search(query: String, conversationLimit: Int, messageLimit: Int): SearchResults
+    /** Conversations whose names or numbers contain [query], and how many messages match it. */
+    suspend fun search(query: String, conversationLimit: Int): SearchResults
+
+    /** Messages whose text matches [query], newest first, loaded a page at a time. */
+    fun messages(query: String): Flow<PagingData<SearchHit>>
 }

@@ -54,20 +54,19 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
-import androidx.compose.ui.text.withStyle
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemContentType
+import androidx.paging.compose.itemKey
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.redfox.messages.core.model.SearchHit
 import dev.redfox.messages.core.ui.R
 import dev.redfox.messages.core.ui.components.Avatar
 import dev.redfox.messages.core.ui.components.ConversationRow
@@ -101,6 +100,7 @@ fun SearchOverlay(
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val messages = viewModel.messages.collectAsLazyPagingItems()
     val progress = remember { Animatable(0f) }
     val latestClose by rememberUpdatedState(onClose)
     val focus = remember { FocusRequester() }
@@ -149,6 +149,7 @@ fun SearchOverlay(
         val insets = WindowInsets.ime.union(WindowInsets.navigationBars)
         Results(
             state = state,
+            messages = messages,
             onOpenThread = { threadId ->
                 onOpenThread(threadId)
                 latestClose()
@@ -266,12 +267,19 @@ private fun FieldButton(icon: Int, description: String, onClick: () -> Unit, mod
  * People first, nearest the thumb, then matching messages, newest nearest.
  */
 @Composable
-private fun Results(state: SearchState, onOpenThread: (Long) -> Unit, modifier: Modifier = Modifier) {
-    val colors = ObsidianTheme.colors
-    val type = ObsidianTheme.typography
+private fun Results(
+    state: SearchState,
+    messages: LazyPagingItems<SearchRow>,
+    onOpenThread: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val timeFormat = remember { TimeFormat() }
     val results = state.results
     val now = remember(results) { System.currentTimeMillis() }
+    // The count comes from the index; while it's still being built, from what has loaded.
+    val messageCount = results?.messageCount
+        ?: if (messages.loadState.refresh is LoadState.NotLoading) messages.itemCount else null
+    val nothing = results != null && results.conversations.isEmpty() && messageCount == 0
 
     LazyColumn(
         modifier = modifier,
@@ -283,9 +291,9 @@ private fun Results(state: SearchState, onOpenThread: (Long) -> Unit, modifier: 
                 Notice("Search your messages", "Find words in any message, or a person by name or number.")
             }
             state.tooShort -> Unit
-            results == null || results.query != state.query.trim() && results.isEmpty ->
+            results == null || results.query != state.query.trim() && nothing ->
                 item(key = "searching") { Notice("Searching…", null) }
-            results.isEmpty -> item(key = "none") {
+            nothing -> item(key = "none") {
                 Notice("No results", "Nothing matches “${state.query.trim()}”.")
             }
             else -> {
@@ -299,13 +307,19 @@ private fun Results(state: SearchState, onOpenThread: (Long) -> Unit, modifier: 
                     }
                     item(key = "people") { SectionTitle("People") }
                 }
-                if (results.messages.isNotEmpty()) {
-                    items(results.messages, key = { "m" + it.message.key }) { hit ->
-                        HitRow(hit, results.query, timeFormat.conversationTime(hit.message.timestamp, now)) {
-                            onOpenThread(hit.message.threadId)
-                        }
+                if (messages.itemCount > 0) {
+                    // Only rows near the screen are loaded; the rest page in while scrolling.
+                    items(
+                        count = messages.itemCount,
+                        key = messages.itemKey { "m" + it.hit.message.key },
+                        contentType = messages.itemContentType { "hit" },
+                    ) { index ->
+                        val row = messages[index] ?: return@items
+                        HitRow(row) { onOpenThread(row.hit.message.threadId) }
                     }
-                    item(key = "messages") { SectionTitle("Messages · ${results.messages.size}") }
+                    item(key = "messages") {
+                        SectionTitle(if (messageCount != null) "Messages · $messageCount" else "Messages")
+                    }
                 }
             }
         }
@@ -336,16 +350,17 @@ private fun Notice(title: String, body: String?) {
     }
 }
 
-/** One matching message: who, when, and the text around the match with the match highlighted. */
+/** One matching message: who, when, and the text around the match with the matches highlighted. */
 @Composable
-private fun HitRow(hit: SearchHit, query: String, timeLabel: String, onClick: () -> Unit) {
+private fun HitRow(row: SearchRow, onClick: () -> Unit) {
     val colors = ObsidianTheme.colors
     val type = ObsidianTheme.typography
+    val hit = row.hit
     val message = hit.message
     val people = hit.conversation?.participants ?: listOfNotNull(message.sender)
     val title = hit.conversation?.title ?: message.sender?.displayName ?: "Unknown"
     val accent = colors.accentLight
-    val snippet = remember(message.key, query, accent) { highlight(message.body, query, accent) }
+    val snippet = remember(row.excerpt, accent) { row.excerpt.annotated(accent) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -365,35 +380,9 @@ private fun HitRow(hit: SearchHit, query: String, timeLabel: String, onClick: ()
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Text(timeLabel, style = type.caption, color = colors.textTertiary)
+                Text(row.timeLabel, style = type.caption, color = colors.textTertiary)
             }
             Text(snippet, style = type.body, color = colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
-
-/**
- * The part of [text] around the first match (so a match deep in a long SMS is visible),
- * with every occurrence of [query] in it highlighted.
- */
-internal fun highlight(text: String, query: String, color: Color): AnnotatedString {
-    val oneLine = text.replace('\n', ' ')
-    val first = oneLine.indexOf(query, ignoreCase = true)
-    val start = if (first > CONTEXT_CHARS) first - CONTEXT_CHARS else 0
-    val window = oneLine.substring(start, minOf(oneLine.length, start + WINDOW_CHARS))
-    return buildAnnotatedString {
-        if (start > 0) append("…")
-        var cursor = 0
-        while (query.isNotEmpty()) {
-            val at = window.indexOf(query, cursor, ignoreCase = true)
-            if (at < 0) break
-            append(window, cursor, at)
-            withStyle(SpanStyle(color = color, fontWeight = FontWeight.SemiBold)) { append(window, at, at + query.length) }
-            cursor = at + query.length
-        }
-        append(window, cursor, window.length)
-    }
-}
-
-private const val CONTEXT_CHARS = 28
-private const val WINDOW_CHARS = 180

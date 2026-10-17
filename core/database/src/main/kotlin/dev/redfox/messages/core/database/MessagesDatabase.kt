@@ -12,12 +12,17 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * The inbox index (PLAN.md §5): a rebuildable cache of the system SMS/MMS store. User-created
+ * The inbox and search indexes (PLAN.md §5): a rebuildable cache of the system SMS/MMS store. User-created
  * data (stars, schedules, pins) lives in [UserDatabase], which is never wiped.
  */
-@Database(entities = [ConversationEntity::class], version = 2, exportSchema = true)
+@Database(
+    entities = [ConversationEntity::class, SearchDocEntity::class, SearchFtsEntity::class, SearchSyncEntity::class],
+    version = 3,
+    exportSchema = true,
+)
 abstract class MessagesDatabase : RoomDatabase() {
     abstract fun conversations(): ConversationDao
+    abstract fun search(): SearchDao
 }
 
 @Module
@@ -33,6 +38,9 @@ object DatabaseModule {
 
     @Provides
     fun conversationDao(database: MessagesDatabase): ConversationDao = database.conversations()
+
+    @Provides
+    fun searchDao(database: MessagesDatabase): SearchDao = database.search()
 
     /** No destructive fallback: a missing migration must fail loudly in testing, not drop stars. */
     @Provides

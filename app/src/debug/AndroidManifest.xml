@@ -11,5 +11,10 @@
             android:name=".debug.DebugSkipOnboardingReceiver"
             android:exported="true"
             android:permission="android.permission.DUMP" />
+        <!-- Debug-only: times searches on a real message store; see DebugSearchBenchReceiver. -->
+        <receiver
+            android:name=".debug.DebugSearchBenchReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
     </application>
 </manifest>

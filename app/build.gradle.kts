@@ -75,6 +75,8 @@ android {
 }
 
 dependencies {
+    // The debug-only search benchmark reads the first page of results.
+    debugImplementation(libs.androidx.paging.testing)
     implementation(project(":core:common"))
     implementation(project(":core:model"))
     implementation(project(":core:domain"))
