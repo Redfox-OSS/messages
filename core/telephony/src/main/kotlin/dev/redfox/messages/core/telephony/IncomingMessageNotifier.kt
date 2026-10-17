@@ -70,13 +70,15 @@ class IncomingMessageNotifier @Inject constructor(
     }
 
     /** A message we sent was rejected by the network. */
-    fun notifySendFailed(address: String, threadId: Long = -1) {
+    fun notifySendFailed(address: String, threadId: Long = -1, reason: String? = null) {
         if (!canNotify()) return
         ensureChannels()
         val id = FAILED_ID_BASE + address.hashCode()
+        val text = context.getString(R.string.notification_send_failed_text, address) + (reason?.let { "\n$it" } ?: "")
         val notification = baseMessage(id, launchIntent(threadId = threadId, address = address.takeIf { threadId <= 0 }))
             .setContentTitle(context.getString(R.string.notification_send_failed_title))
-            .setContentText(context.getString(R.string.notification_send_failed_text, address))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
     }

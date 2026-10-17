@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.os.SystemClock
 import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
@@ -47,15 +48,75 @@ class MmsTransport @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val store: MmsStore,
 ) {
-    /** Asks the carrier's server for the message a notification points at. */
-    fun download(notificationUri: Uri, contentLocation: String, subId: Int) {
+    /**
+     * Asks the carrier's server for the message a notification points at. [attempt] counts
+     * automatic retries (see [scheduleDownloadRetry]).
+     */
+    fun download(notificationUri: Uri, contentLocation: String, subId: Int, attempt: Int = 0) {
         val file = newFile("dl")
         val intent = Intent(context, MmsDownloadedReceiver::class.java)
             .setAction(ACTION_DOWNLOADED)
             .setData(notificationUri)
             .putExtra(EXTRA_FILE, file.absolutePath)
             .putExtra(EXTRA_SUB_ID, subId)
-        smsManager(subId).downloadMultimediaMessage(context, contentLocation, fileUri(file), headers(subId), broadcast(intent))
+            .putExtra(EXTRA_LOCATION, contentLocation)
+            .putExtra(EXTRA_ATTEMPT, attempt)
+        val location = withTransactionId(notificationUri, contentLocation, subId)
+        smsManager(subId).downloadMultimediaMessage(context, location, fileUri(file), headers(subId), broadcast(intent))
+    }
+
+    /**
+     * Some carriers' servers expect the notification's transaction id on the end of the
+     * address they gave (the carrier config's appendTransactionId / enabledTransID).
+     */
+    private fun withTransactionId(notificationUri: Uri, contentLocation: String, subId: Int): String {
+        if (carrierConfig(subId)?.getBoolean(SmsManager.MMS_CONFIG_APPEND_TRANSACTION_ID) != true) return contentLocation
+        val transactionId = store.transactionId(notificationUri)?.let { String(it, Charsets.ISO_8859_1) } ?: return contentLocation
+        return if (transactionId in contentLocation) contentLocation else contentLocation + transactionId
+    }
+
+    /** Fetches a notification's message again after [delayMillis], for a failure that was likely temporary. */
+    fun scheduleDownloadRetry(notificationUri: Uri, subId: Int, attempt: Int, delayMillis: Long) {
+        val intent = Intent(context, MmsRetryReceiver::class.java)
+            .setAction(ACTION_RETRY_DOWNLOAD)
+            .setData(notificationUri)
+            .putExtra(EXTRA_SUB_ID, subId)
+            .putExtra(EXTRA_ATTEMPT, attempt)
+        schedule(intent, notificationUri, delayMillis)
+    }
+
+    /** An automatic download retry is due, unless the notification was deleted meanwhile. */
+    fun retryDownload(notificationUri: Uri, attempt: Int) {
+        if (!store.exists(notificationUri)) return
+        val (location, subId) = store.notificationDetails(notificationUri) ?: return
+        download(notificationUri, location, subId, attempt)
+    }
+
+    /**
+     * A downloaded message, read with the carrier's content-disposition setting, and with the
+     * other one if that fails (as AOSP does: some carriers' servers write that header badly).
+     */
+    fun parseRetrieved(bytes: ByteArray, subId: Int): RetrieveConf? {
+        val disposition = carrierConfig(subId)?.getBoolean(SmsManager.MMS_CONFIG_SUPPORT_MMS_CONTENT_DISPOSITION, true) ?: true
+        return listOf(disposition, !disposition).firstNotNullOfOrNull { parse ->
+            runCatching { PduParser(bytes, parse).parse() }.getOrNull() as? RetrieveConf
+        }
+    }
+
+    /**
+     * For a SIM on a network that's known not to offer MMS (Jio: no MMS access point, and the
+     * MMS server addresses that circulate online don't exist),
+     * why a send failed; null for other SIMs. Sends are still tried (someone may have added an
+     * access point by hand), but a failure isn't retried for minutes: it's explained at once.
+     */
+    fun unavailableReason(subId: Int): String? {
+        val sub = usableSubscription(subId)
+        val operator = runCatching {
+            context.getSystemService(android.telephony.TelephonyManager::class.java)?.createForSubscriptionId(sub)?.simOperator
+        }.getOrNull().orEmpty()
+        val carrier = carrierWithoutMms(operator) ?: return null
+        return "$carrier doesn't appear to offer MMS, so photos, voice notes and group messages " +
+            "can't be sent from this SIM."
     }
 
     /** Sends a failed MMS again: the stored copy is replaced by a fresh one (it moves to the bottom). */
@@ -66,7 +127,7 @@ class MmsTransport @Inject constructor(
         send(message.threadId, message.recipients, text, message.parts.filter { it.text == null }, message.subId)
     }
 
-    /** Retries a download that failed, from its stored notification. */
+    /** Retries a download that failed (the user tapped it), from its stored notification. */
     fun retryDownload(notificationUri: Uri) {
         val (location, subId) = store.notificationDetails(notificationUri) ?: return
         download(notificationUri, location, subId)
@@ -138,6 +199,10 @@ class MmsTransport @Inject constructor(
             .putExtra(EXTRA_SUB_ID, subId)
             .putExtra(EXTRA_TRANSACTION_ID, transactionId)
             .putExtra(EXTRA_ATTEMPT, attempt)
+        schedule(intent, uri, delayMillis)
+    }
+
+    private fun schedule(intent: Intent, uri: Uri, delayMillis: Long) {
         val pending = PendingIntent.getBroadcast(
             context, uri.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -164,11 +229,23 @@ class MmsTransport @Inject constructor(
      * Tells the carrier the message arrived (M-NotifyResp.ind, "retrieved"), so it isn't
      * pushed again. Best effort: many carriers don't need it.
      */
-    fun acknowledge(transactionId: ByteArray, subId: Int) = runCatching {
-        val ack = NotifyRespInd(PduHeaders.CURRENT_MMS_VERSION, transactionId, PduHeaders.STATUS_RETRIEVED)
-        val file = newFile("ack").apply { writeBytes(PduComposer(context, ack).make()) }
-        smsManager(subId).sendMultimediaMessage(context, fileUri(file), null, headers(subId), null)
-    }.onFailure { Log.w(TAG, "Couldn't acknowledge MMS", it) }
+    fun acknowledge(transactionId: ByteArray, subId: Int, contentLocation: String?) =
+        notifyResponse(transactionId, subId, contentLocation, PduHeaders.STATUS_RETRIEVED)
+
+    /**
+     * Tells the carrier a message couldn't be fetched yet (M-NotifyResp.ind, "deferred"), so it
+     * keeps it on its server instead of treating it as delivered.
+     */
+    fun defer(transactionId: ByteArray, subId: Int, contentLocation: String?) =
+        notifyResponse(transactionId, subId, contentLocation, PduHeaders.STATUS_DEFERRED)
+
+    /** Some carriers want replies posted to the message's own address (notifyWapMMSC); the rest to the MMS server. */
+    private fun notifyResponse(transactionId: ByteArray, subId: Int, contentLocation: String?, status: Int) = runCatching {
+        val reply = NotifyRespInd(PduHeaders.CURRENT_MMS_VERSION, transactionId, status)
+        val file = newFile("ack").apply { writeBytes(PduComposer(context, reply).make()) }
+        val location = contentLocation?.takeIf { carrierConfig(subId)?.getBoolean(SmsManager.MMS_CONFIG_NOTIFY_WAP_MMSC_ENABLED) == true }
+        smsManager(subId).sendMultimediaMessage(context, fileUri(file), location, headers(subId), null)
+    }.onFailure { Log.w(TAG, "Couldn't send the MMS reply to the carrier", it) }
 
     /** The carrier's maximum MMS size in bytes, to size photos and voice notes to fit. */
     fun maxMessageSize(subId: Int): Int =
@@ -231,15 +308,18 @@ class MmsTransport @Inject constructor(
      * The phone-identifying headers the carrier's MMS server expects, where the carrier config
      * leaves them empty (see [MmsHeaders]).
      */
-    private fun headers(subId: Int): android.os.Bundle? {
-        val config = runCatching { smsManager(subId).carrierConfigValues }.getOrNull()
+    private fun headers(subId: Int): Bundle {
+        val config = carrierConfig(subId)
         val headers = MmsHeaders.overrides(
             carrierUserAgent = config?.getString(SmsManager.MMS_CONFIG_USER_AGENT),
             carrierUaProfUrl = config?.getString(SmsManager.MMS_CONFIG_UA_PROF_URL),
         )
         Log.w(TAG, "MMS headers: UA=${headers.userAgent ?: "(carrier)"} profile=${headers.uaProfUrl ?: "(carrier)"}")
-        return headers.toBundle()
+        // Group messages go as one MMS to everyone, as AOSP, Signal and QKSMS ask for.
+        return (headers.toBundle() ?: Bundle()).apply { putBoolean(SmsManager.MMS_CONFIG_GROUP_MMS_ENABLED, true) }
     }
+
+    private fun carrierConfig(subId: Int): Bundle? = runCatching { smsManager(subId).carrierConfigValues }.getOrNull()
 
     private fun smsManager(subId: Int): SmsManager {
         val manager = context.getSystemService(SmsManager::class.java)
@@ -257,6 +337,8 @@ class MmsTransport @Inject constructor(
         const val EXTRA_FILE = "file"
         const val EXTRA_SUB_ID = "sub_id"
         const val ACTION_RETRY = "dev.redfox.messages.MMS_RETRY"
+        const val ACTION_RETRY_DOWNLOAD = "dev.redfox.messages.MMS_RETRY_DOWNLOAD"
+        const val EXTRA_LOCATION = "location"
         const val EXTRA_TRANSACTION_ID = "transaction_id"
         const val EXTRA_ATTEMPT = "attempt"
         const val EXPIRY_SECONDS = 7L * 24 * 60 * 60
@@ -290,24 +372,36 @@ class MmsDownloadedReceiver : BroadcastReceiver() {
         val pending = goAsync()
         scope.launch(io) {
             try {
+                val http = intent.getIntExtra(SmsManager.EXTRA_MMS_HTTP_STATUS, 0)
+                val attempt = intent.getIntExtra(MmsTransport.EXTRA_ATTEMPT, 0)
+                val location = intent.getStringExtra(MmsTransport.EXTRA_LOCATION)
                 val bytes = file?.takeIf { result == Activity.RESULT_OK && it.length() > 0 }?.readBytes()
-                val conf = bytes?.let { runCatching { PduParser(it).parse() }.getOrNull() } as? RetrieveConf
-                if (conf == null) {
-                    val http = intent.getIntExtra(SmsManager.EXTRA_MMS_HTTP_STATUS, 0)
-                    Log.w(MmsTransport.TAG, "MMS download failed: result=$result http=$http")
-                    store.markDownloadFailed(notificationUri)
-                    return@launch
+                val conf = bytes?.let { transport.parseRetrieved(it, subId) }
+                val outcome = downloadOutcome(result == Activity.RESULT_OK, result, http, conf != null, conf?.retrieveStatus)
+                Log.w(
+                    MmsTransport.TAG,
+                    "MMS download result: result=$result http=$http status=${conf?.retrieveStatus} attempt=$attempt -> $outcome",
+                )
+                // Replies to the carrier carry the notification's transaction id: the downloaded
+                // message usually has none, so it's read before the notification is deleted.
+                val transactionId = store.transactionId(notificationUri) ?: conf?.transactionId
+                when {
+                    outcome == MmsOutcome.Done && conf != null -> {
+                        val stored = store.storeRetrieved(conf, subId) ?: return@launch
+                        store.delete(notificationUri)
+                        notifier.notifyMms(stored)
+                        // Without this some carriers send the message again, or tell the sender it never arrived.
+                        if (transactionId != null) transport.acknowledge(transactionId, subId, location)
+                        else Log.w(MmsTransport.TAG, "No transaction id to acknowledge the MMS with")
+                    }
+                    outcome == MmsOutcome.Retry && attempt < RETRY_DELAYS_MILLIS.size ->
+                        transport.scheduleDownloadRetry(notificationUri, subId, attempt + 1, RETRY_DELAYS_MILLIS[attempt])
+                    else -> {
+                        store.markDownloadFailed(notificationUri)
+                        // Ask the carrier to keep it, so tapping the message can fetch it later.
+                        transactionId?.let { transport.defer(it, subId, location) }
+                    }
                 }
-                // The reply to the carrier carries the notification's transaction id: the
-                // downloaded message usually has none, so it must be read before the
-                // notification is deleted. Without the reply some carriers send it again, or
-                // tell the sender it never arrived.
-                val transactionId = store.transactionId(notificationUri) ?: conf.transactionId
-                val stored = store.storeRetrieved(conf, subId) ?: return@launch
-                store.delete(notificationUri)
-                notifier.notifyMms(stored)
-                if (transactionId != null) transport.acknowledge(transactionId, subId)
-                else Log.w(MmsTransport.TAG, "No transaction id to acknowledge the MMS with")
             } catch (e: RuntimeException) {
                 Log.e(MmsTransport.TAG, "Couldn't store downloaded MMS", e)
                 store.markDownloadFailed(notificationUri)
@@ -347,21 +441,27 @@ class MmsSentReceiver : BroadcastReceiver() {
                 val confId = conf?.transactionId
                 val matches = sentId == null || confId == null || sentId.contentEquals(confId)
                 val outcome = sendOutcome(result == Activity.RESULT_OK, result, http, conf?.responseStatus, matches)
+                val noMmsReason = transport.unavailableReason(subId)
                 Log.w(
                     MmsTransport.TAG,
                     "MMS send result: result=$result http=$http status=${conf?.responseStatus} " +
                         "matches=$matches attempt=$attempt -> $outcome",
                 )
                 when {
-                    outcome == SendOutcome.Sent -> store.markSent(uri, conf?.messageId?.let { String(it) })
-                    outcome == SendOutcome.Retry && attempt < SEND_RETRY_DELAYS_MILLIS.size && file?.exists() == true -> {
+                    outcome == MmsOutcome.Done -> store.markSent(uri, conf?.messageId?.let { String(it) })
+                    outcome == MmsOutcome.Retry && attempt < RETRY_DELAYS_MILLIS.size && file?.exists() == true &&
+                        noMmsReason == null -> {
                         keepFile = true
-                        transport.scheduleRetry(uri, file, subId, sentId, attempt + 1, SEND_RETRY_DELAYS_MILLIS[attempt])
+                        transport.scheduleRetry(uri, file, subId, sentId, attempt + 1, RETRY_DELAYS_MILLIS[attempt])
                     }
                     else -> {
                         store.markFailed(uri)
+                        // On a network known to have no MMS the likely cause is that, not the error code.
+                        val reason = (if (result != Activity.RESULT_OK) noMmsReason else null)
+                            ?: failureReason(result == Activity.RESULT_OK, result, http, conf?.responseStatus)
+                        Log.w(MmsTransport.TAG, "MMS not sent: $reason")
                         val (title, threadId) = store.describe(uri)
-                        notifier.notifySendFailed(title, threadId)
+                        notifier.notifySendFailed(title, threadId, reason)
                     }
                 }
             } catch (e: RuntimeException) {
@@ -383,8 +483,21 @@ class MmsRetryReceiver : BroadcastReceiver() {
     @Inject @Dispatcher(MessagesDispatcher.IO) lateinit var io: CoroutineDispatcher
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != MmsTransport.ACTION_RETRY) return
         val uri = intent.data ?: return
+        if (intent.action == MmsTransport.ACTION_RETRY_DOWNLOAD) {
+            val attempt = intent.getIntExtra(MmsTransport.EXTRA_ATTEMPT, 1)
+            val pending = goAsync()
+            scope.launch(io) {
+                try {
+                    Log.w(MmsTransport.TAG, "Fetching MMS $uri again (attempt $attempt)")
+                    transport.retryDownload(uri, attempt)
+                } finally {
+                    pending.finish()
+                }
+            }
+            return
+        }
+        if (intent.action != MmsTransport.ACTION_RETRY) return
         val file = intent.getStringExtra(MmsTransport.EXTRA_FILE)?.let(::File) ?: return
         val subId = intent.getIntExtra(MmsTransport.EXTRA_SUB_ID, SubscriptionManager.INVALID_SUBSCRIPTION_ID)
         val transactionId = intent.getByteArrayExtra(MmsTransport.EXTRA_TRANSACTION_ID)

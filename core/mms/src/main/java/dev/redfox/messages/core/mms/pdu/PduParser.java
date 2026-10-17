@@ -60,6 +60,9 @@ public class PduParser {
      */
     private ByteArrayInputStream mPduDataStream = null;
 
+    /** Whether to read the Content-Disposition part header (see the two-argument constructor). */
+    private final boolean mParseContentDisposition;
+
     /**
      * Store pdu headers
      */
@@ -93,7 +96,16 @@ public class PduParser {
      * @param pduDataStream pdu data to be parsed
      */
     public PduParser(byte[] pduDataStream) {
+        this(pduDataStream, true);
+    }
+
+    /**
+     * @param parseContentDisposition false for carriers whose MMS servers send the part header
+     *        Content-Disposition malformed (the carrier config's supportMmsContentDisposition).
+     */
+    public PduParser(byte[] pduDataStream, boolean parseContentDisposition) {
         mPduDataStream = new ByteArrayInputStream(pduDataStream);
+        mParseContentDisposition = parseContentDisposition;
     }
 
     /**
@@ -827,7 +839,7 @@ public class PduParser {
      * @param pduDataStream pdu data input stream
      * @return parts in PduBody structure
      */
-    protected static PduBody parseParts(ByteArrayInputStream pduDataStream) {
+    protected PduBody parseParts(ByteArrayInputStream pduDataStream) {
         if (pduDataStream == null) {
             return null;
         }
@@ -1586,7 +1598,7 @@ public class PduParser {
      * @param length length of the headers
      * @return true if parse successfully, false otherwise
      */
-    protected static boolean parsePartHeaders(ByteArrayInputStream pduDataStream,
+    protected boolean parsePartHeaders(ByteArrayInputStream pduDataStream,
             PduPart part, int length) {
         assert(null != pduDataStream);
         assert(null != part);
@@ -1660,9 +1672,8 @@ public class PduParser {
                          * some carrier mmsc servers do not support content_disposition
                          * field correctly
                          */
-                        // Was the platform-internal config_mms_content_disposition_support,
-                        // whose AOSP default is true; apps can't read internal resources.
-                        boolean contentDisposition = true;
+                        // From the carrier config (supportMmsContentDisposition), via the constructor.
+                        boolean contentDisposition = mParseContentDisposition;
 
                         if (contentDisposition) {
                             int len = parseValueLength(pduDataStream);
