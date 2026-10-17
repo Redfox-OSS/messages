@@ -8,6 +8,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -87,7 +89,8 @@ private val BottomGap = 12.dp
 /**
  * Search, without leaving the screen: the nav bar's accented search pill stretches to the left
  * into a full-width field that rides just above the keyboard, and results stack up above it
- * (nearest the thumb first). Back, or the close button, folds it back into the pill.
+ * (nearest the thumb first). Back, or a tap outside the results, folds it back into the pill;
+ * the chevron only puts the keyboard away.
  */
 @Composable
 fun SearchOverlay(
@@ -169,7 +172,10 @@ fun SearchOverlay(
                 keyboard?.hide()
             },
             onClear = { viewModel.dispatch(SearchIntent.Clear) },
-            onClose = { latestClose() },
+            onHideKeyboard = {
+                focusManager.clearFocus()
+                keyboard?.hide()
+            },
             focus = focus,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -179,6 +185,7 @@ fun SearchOverlay(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SearchField(
     progress: Float,
@@ -187,7 +194,8 @@ private fun SearchField(
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onClear: () -> Unit,
-    onClose: () -> Unit,
+    /** Dismisses only the keyboard; search stays open (back or a tap outside closes it). */
+    onHideKeyboard: () -> Unit,
     focus: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
@@ -232,7 +240,10 @@ private fun SearchField(
             if (query.isNotEmpty()) {
                 FieldButton(R.drawable.ic_close, "Clear search", onClear, Modifier.alpha(contentAlpha))
             }
-            FieldButton(R.drawable.ic_arrow_downward, "Close search", onClose, Modifier.alpha(contentAlpha))
+            // Only while the keyboard is up: there's nothing to put away otherwise.
+            if (WindowInsets.isImeVisible) {
+                FieldButton(R.drawable.ic_keyboard_arrow_down, "Hide keyboard", onHideKeyboard, Modifier.alpha(contentAlpha))
+            }
         }
     }
 }
