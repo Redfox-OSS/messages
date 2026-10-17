@@ -120,6 +120,15 @@ fun ConversationsScreen(
                 item(key = "filters", contentType = "filters") {
                     FilterRow(selected = state.filter, onIntent = onIntent)
                 }
+                // In the list, under the filters: it can't overlap them, and since it only shows
+                // while the inbox is still empty (the first sync), nothing below it moves.
+                item(key = "sync", contentType = "sync") {
+                    SyncProgressBar(
+                        visible = state.isIndexing && conversations.itemCount == 0,
+                        progress = state.syncProgress,
+                        modifier = Modifier.padding(top = ObSpacing.S),
+                    )
+                }
                 if (settled && conversations.itemCount == 0) {
                     item(key = "empty", contentType = "empty") {
                         Box(Modifier.fillMaxWidth().height(420.dp)) {
@@ -160,12 +169,6 @@ fun ConversationsScreen(
                 }
             }
         }
-        // Only the first sync into an empty inbox is worth showing; quick re-syncs stay silent.
-        SyncProgressBar(
-            visible = state.hasSmsAccess && state.isIndexing && conversations.itemCount == 0,
-            progress = state.syncProgress,
-            modifier = Modifier.padding(top = padding.calculateTopPadding() - ObSpacing.S),
-        )
         state.confirmDelete?.let { conversation ->
             ObAlertDialog(
                 title = "Delete conversation?",

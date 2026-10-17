@@ -11,8 +11,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,7 +44,7 @@ private val TrackHeight = 3.dp
 /**
  * A slim, non-blocking sync indicator: a hairline track with an accent fill that eases toward
  * the real [progress], a soft light sweeping along the fill so it reads as alive, and a small
- * caption. It floats over the list (no layout shift) and slides away when done.
+ * caption. Sits in the content flow (never over it) and folds away when done.
  */
 @Composable
 fun SyncProgressBar(
@@ -56,8 +56,8 @@ fun SyncProgressBar(
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = fadeIn(tween(220)) + slideInVertically(tween(260)) { -it / 2 },
-        exit = fadeOut(tween(420, delayMillis = 250)) + slideOutVertically(tween(420, delayMillis = 250)) { -it / 2 },
+        enter = fadeIn(tween(220)) + expandVertically(tween(260)),
+        exit = fadeOut(tween(320, delayMillis = 250)) + shrinkVertically(tween(360, delayMillis = 250)),
     ) {
         val colors = ObsidianTheme.colors
         val shown by animateFloatAsState(
