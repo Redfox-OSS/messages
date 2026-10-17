@@ -3,6 +3,7 @@ package dev.redfox.messages.feature.thread
 import androidx.compose.runtime.Immutable
 import dev.redfox.messages.core.model.Message
 import dev.redfox.messages.core.ui.components.BubblePosition
+import dev.redfox.messages.core.ui.format.BrandLink
 import dev.redfox.messages.core.ui.format.TimeFormat
 
 /** A row of the paged thread list: a day divider or a message. */
@@ -12,7 +13,8 @@ sealed interface ThreadRow {
 
     data class Day(override val key: String, val label: String) : ThreadRow
 
-    data class Msg(val message: Message) : ThreadRow {
+    /** [brandLinks] are found while paging (off the main thread), not while drawing. */
+    data class Msg(val message: Message, val brandLinks: List<BrandLink> = emptyList()) : ThreadRow {
         override val key: String get() = message.key
     }
 }

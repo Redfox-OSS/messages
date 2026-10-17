@@ -1,5 +1,6 @@
 package dev.redfox.messages.feature.thread
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -87,6 +88,15 @@ fun ThreadRoute(
                 // ACTION_DIAL only pre-fills the dialler: no call permission, the user confirms.
                 context.startActivity(Intent(Intent.ACTION_DIAL, "tel:${effect.phoneNumber}".toUri()))
             }
+            is ThreadEffect.OpenInApp -> {
+                val view = Intent(Intent.ACTION_VIEW, effect.url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
+                // Straight into the brand's app when it's installed and handles the link; else the browser.
+                try {
+                    context.startActivity(Intent(view).setPackage(effect.packageName))
+                } catch (e: ActivityNotFoundException) {
+                    runCatching { uriHandler.openUri(effect.url) }
+                }
+            }
             // The sent message isn't in the list yet; FollowNewest scrolls once it lands.
             ThreadEffect.ScrollToNewest -> scrollToSent = true
         }
@@ -159,6 +169,8 @@ fun ThreadScreen(
                                 timeLabel = layout.timeLabel,
                                 showSenderName = layout.showSender,
                                 onRetry = { onIntent(ThreadIntent.Retry(row.message)) },
+                                brandLinks = row.brandLinks,
+                                onOpenBrandLink = { onIntent(ThreadIntent.OpenBrandLink(it)) },
                                 modifier = reveal.padding(
                                     // Tight gap inside a run, a breath between runs.
                                     top = if (layout.position == BubblePosition.Middle || layout.position == BubblePosition.Last) 2.dp

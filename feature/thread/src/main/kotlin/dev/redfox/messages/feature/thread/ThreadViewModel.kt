@@ -22,6 +22,8 @@ import dev.redfox.messages.core.model.Message
 import dev.redfox.messages.core.model.RichSuggestion
 import dev.redfox.messages.core.model.SimCard
 import dev.redfox.messages.core.model.SuggestionAction
+import dev.redfox.messages.core.ui.format.BrandLink
+import dev.redfox.messages.core.ui.format.LinkBrands
 import dev.redfox.messages.core.ui.format.TimeFormat
 import dev.redfox.messages.core.ui.mvi.MviViewModel
 import dev.redfox.messages.core.ui.mvi.UiEffect
@@ -77,11 +79,14 @@ sealed interface ThreadIntent : UiIntent {
     data object Send : ThreadIntent
     data object SwitchSim : ThreadIntent
     data class Retry(val message: Message) : ThreadIntent
+    data class OpenBrandLink(val link: BrandLink) : ThreadIntent
 }
 
 sealed interface ThreadEffect : UiEffect {
     data class OpenUrl(val url: String) : ThreadEffect
     data class Dial(val phoneNumber: String) : ThreadEffect
+    /** Open [url] in the brand's app ([packageName]) when installed, else the browser. */
+    data class OpenInApp(val url: String, val packageName: String) : ThreadEffect
     /** A message was just sent: bring the newest message into view. */
     data object ScrollToNewest : ThreadEffect
 }
@@ -126,7 +131,7 @@ class ThreadViewModel @AssistedInject constructor(
     val rows: Flow<PagingData<ThreadRow>> = pagedMessages(threadId)
         .map { page ->
             val now = System.currentTimeMillis()
-            page.map<_, ThreadRow> { ThreadRow.Msg(it) }
+            page.map<_, ThreadRow> { ThreadRow.Msg(it, LinkBrands.find(it.body)) }
                 .insertSeparators { newer, older ->
                     daySeparator((newer as? ThreadRow.Msg)?.message, (older as? ThreadRow.Msg)?.message, timeFormat, now)
                 }
@@ -171,6 +176,7 @@ class ThreadViewModel @AssistedInject constructor(
             }
             ThreadIntent.Send -> send()
             is ThreadIntent.Retry -> retryMessage(intent.message)
+            is ThreadIntent.OpenBrandLink -> emit(ThreadEffect.OpenInApp(intent.link.url, intent.link.brand.packageName))
         }
     }
 

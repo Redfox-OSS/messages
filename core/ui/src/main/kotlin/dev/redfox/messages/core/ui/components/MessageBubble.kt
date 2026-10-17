@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import dev.redfox.messages.core.model.DeliveryStatus
+import dev.redfox.messages.core.ui.format.BrandLink
 import dev.redfox.obsidian.effects.pressable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -54,6 +55,9 @@ fun MessageBubble(
     modifier: Modifier = Modifier,
     /** Shown as "Tap to retry" on a failed message when set. */
     onRetry: (() -> Unit)? = null,
+    /** Well-known services linked in the message ([dev.redfox.messages.core.ui.format.LinkBrands.find]). */
+    brandLinks: List<BrandLink> = emptyList(),
+    onOpenBrandLink: (BrandLink) -> Unit = {},
 ) {
     val colors = ObsidianTheme.colors
     val type = ObsidianTheme.typography
@@ -99,6 +103,14 @@ fun MessageBubble(
                 // long-press message sheet (PLAN.md §8.4).
                 message.body.isNotEmpty() -> LinkifiedText(message.body, style = type.body, color = colors.textPrimary)
             }
+        }
+        if (brandLinks.isNotEmpty()) {
+            BrandLinkButtons(
+                links = brandLinks,
+                onOpen = onOpenBrandLink,
+                horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start,
+                modifier = Modifier.padding(top = ObSpacing.XS),
+            )
         }
         val sending = message.box == MessageBox.Outbox || message.box == MessageBox.Queued
         if (timeLabel != null || failed || sending) {
