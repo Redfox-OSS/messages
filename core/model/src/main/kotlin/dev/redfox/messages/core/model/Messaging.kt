@@ -27,6 +27,8 @@ data class Conversation(
     val messageCount: Int,
     val hasAttachment: Boolean,
     val category: MessageCategory,
+    val isPinned: Boolean = false,
+    val isArchived: Boolean = false,
 ) {
     val isGroup: Boolean get() = participants.size > 1
     val title: String get() = participants.joinToString { it.displayName }.ifEmpty { "Unknown" }

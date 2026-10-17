@@ -12,10 +12,10 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * App-owned data (PLAN.md §5). Today: the inbox index. Next: pin / archive / mute metadata,
- * scheduled messages, block rules and the FTS search index.
+ * The inbox index (PLAN.md §5): a rebuildable cache of the system SMS/MMS store. User-created
+ * data (stars, schedules, pins) lives in [UserDatabase], which is never wiped.
  */
-@Database(entities = [ConversationEntity::class], version = 1, exportSchema = true)
+@Database(entities = [ConversationEntity::class], version = 2, exportSchema = true)
 abstract class MessagesDatabase : RoomDatabase() {
     abstract fun conversations(): ConversationDao
 }
@@ -33,4 +33,19 @@ object DatabaseModule {
 
     @Provides
     fun conversationDao(database: MessagesDatabase): ConversationDao = database.conversations()
+
+    /** No destructive fallback: a missing migration must fail loudly in testing, not drop stars. */
+    @Provides
+    @Singleton
+    fun userDatabase(@ApplicationContext context: Context): UserDatabase =
+        Room.databaseBuilder(context, UserDatabase::class.java, "user.db").build()
+
+    @Provides
+    fun starredDao(database: UserDatabase): StarredDao = database.starred()
+
+    @Provides
+    fun scheduledDao(database: UserDatabase): ScheduledDao = database.scheduled()
+
+    @Provides
+    fun conversationPrefsDao(database: UserDatabase): ConversationPrefsDao = database.conversationPrefs()
 }

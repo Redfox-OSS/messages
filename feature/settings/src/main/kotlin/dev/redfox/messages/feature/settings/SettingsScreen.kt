@@ -9,6 +9,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import dev.redfox.messages.core.model.SwipeAction
+import dev.redfox.messages.core.model.VibrationPattern
+import dev.redfox.obsidian.components.ObDropdownMenu
+import dev.redfox.obsidian.components.ObMenuItem
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -79,6 +88,35 @@ fun SettingsScreen(
                     modifier = Modifier.padding(top = ObSpacing.L, start = ObSpacing.XXS)
                 )
             }
+            Section("Conversations") {
+                ChoiceRow(
+                    title = "Swipe left",
+                    icon = R.drawable.ic_swipe_left,
+                    selected = state.swipeLeft,
+                    options = SwipeAction.entries,
+                    label = { it.label },
+                    onSelect = { onIntent(SettingsIntent.SwipeActionSelected(left = true, action = it)) },
+                )
+                ObDivider(Modifier.padding(vertical = ObSpacing.M))
+                ChoiceRow(
+                    title = "Swipe right",
+                    icon = R.drawable.ic_swipe_right,
+                    selected = state.swipeRight,
+                    options = SwipeAction.entries,
+                    label = { it.label },
+                    onSelect = { onIntent(SettingsIntent.SwipeActionSelected(left = false, action = it)) },
+                )
+            }
+            Section("Notifications") {
+                ChoiceRow(
+                    title = "Vibration",
+                    icon = R.drawable.ic_notifications,
+                    selected = state.vibration,
+                    options = VibrationPattern.entries,
+                    label = { it.label },
+                    onSelect = { onIntent(SettingsIntent.VibrationSelected(it)) },
+                )
+            }
             Section("Setup") {
                 ObListRow(
                     title = "Default SMS app",
@@ -110,6 +148,40 @@ private fun Section(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(ObSpacing.M)) {
         SectionLabel(title)
         ObCard(Modifier.fillMaxWidth()) { content() }
+    }
+}
+
+/** A settings row whose value is picked from a dropdown. */
+@Composable
+private fun <T> ChoiceRow(
+    title: String,
+    @DrawableRes icon: Int,
+    selected: T,
+    options: List<T>,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ObListRow(
+            title = title,
+            icon = icon,
+            subtitle = label(selected),
+            onClick = { open = true },
+            trailing = { Chevron() },
+        )
+        ObDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { option ->
+                ObMenuItem(
+                    text = label(option),
+                    selected = option == selected,
+                    onClick = {
+                        open = false
+                        onSelect(option)
+                    },
+                )
+            }
+        }
     }
 }
 

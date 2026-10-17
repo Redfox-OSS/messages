@@ -12,8 +12,8 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "conversations",
     indices = [
-        Index(value = ["timestamp"]),
-        Index(value = ["category", "timestamp"]),
+        Index(value = ["archived", "pinned", "timestamp"]),
+        Index(value = ["archived", "category", "timestamp"]),
     ],
 )
 data class ConversationEntity(
@@ -27,4 +27,7 @@ data class ConversationEntity(
     @ColumnInfo(name = "has_attachment") val hasAttachment: Boolean,
     /** `MessageCategory.name`. */
     @ColumnInfo(name = "category") val category: String,
+    /** Copied from the user's conversation settings (`user.db`) at every sync, for sorting and filtering. */
+    @ColumnInfo(name = "pinned", defaultValue = "0") val pinned: Boolean = false,
+    @ColumnInfo(name = "archived", defaultValue = "0") val archived: Boolean = false,
 )

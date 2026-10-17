@@ -18,11 +18,14 @@ import dev.redfox.messages.core.common.MessagesDispatcher
 import dev.redfox.messages.core.contacts.ContactResolver
 import dev.redfox.messages.core.database.ConversationDao
 import dev.redfox.messages.core.database.ConversationEntity
+import dev.redfox.messages.core.database.ConversationPrefsDao
+import dev.redfox.messages.core.database.ConversationPrefsEntity
 import dev.redfox.messages.core.domain.repository.MessagesRepository
 import dev.redfox.messages.core.domain.usecase.InboxFilter
 import dev.redfox.messages.core.model.Conversation
 import dev.redfox.messages.core.model.Message
 import dev.redfox.messages.core.model.MessageCategory
+import dev.redfox.messages.core.model.MessageKind
 import dev.redfox.messages.core.model.SyncStatus
 import dev.redfox.messages.core.telephony.IncomingMessageNotifier
 import dev.redfox.messages.core.telephony.SmsProviderWriter
@@ -50,6 +53,7 @@ import javax.inject.Inject
 internal class MessagesRepositoryImpl @Inject constructor(
     private val indexer: ConversationIndexer,
     private val dao: ConversationDao,
+    private val prefsDao: ConversationPrefsDao,
     private val reader: TelephonyReader,
     private val contacts: ContactResolver,
     private val changes: ProviderChanges,
@@ -87,6 +91,36 @@ internal class MessagesRepositoryImpl @Inject constructor(
 
     override suspend fun threadIdFor(addresses: List<String>): Long = withContext(io) { writer.threadIdFor(addresses.toSet()) }
 
+    override suspend fun setPinned(threadId: Long, pinned: Boolean) = updatePrefs(threadId) { copy(pinned = pinned) }
+
+    override suspend fun setArchived(threadId: Long, archived: Boolean) = updatePrefs(threadId) { copy(archived = archived) }
+
+    /** Saves the user's choice, and patches the index row so the inbox updates immediately. */
+    private suspend fun updatePrefs(threadId: Long, change: ConversationPrefsEntity.() -> ConversationPrefsEntity) {
+        val prefs = (prefsDao.get(threadId) ?: ConversationPrefsEntity(threadId)).change()
+        if (prefs.pinned || prefs.archived) prefsDao.upsert(prefs) else prefsDao.delete(threadId)
+        dao.setFlags(threadId, prefs.pinned, prefs.archived)
+    }
+
+    override suspend fun toggleRead(threadId: Long) = withContext(io) {
+        val unread = (dao.observe(threadId).first()?.unreadCount ?: 0) > 0
+        if (unread) markRead(threadId) else writer.markLatestIncomingUnread(threadId)
+    }
+
+    override suspend fun deleteThread(threadId: Long) = withContext(io) {
+        writer.deleteThread(threadId)
+        prefsDao.delete(threadId)
+        dao.delete(listOf(threadId))
+    }
+
+    override suspend fun deleteMessage(message: Message) = withContext(io) {
+        when (message.kind) {
+            MessageKind.Sms -> writer.deleteSms(message.id)
+            MessageKind.Mms -> writer.deleteMms(message.id)
+        }
+        Unit
+    }
+
     override fun observeSyncStatus(): Flow<SyncStatus> = indexer.status
 
     override fun pagedConversations(filter: InboxFilter): Flow<PagingData<Conversation>> =
@@ -98,6 +132,7 @@ internal class MessagesRepositoryImpl @Inject constructor(
                 InboxFilter.Transactions -> dao.pageByCategory(MessageCategory.Transactions.name)
                 InboxFilter.Otp -> dao.pageByCategory(MessageCategory.Otp.name)
                 InboxFilter.Offers -> dao.pageByCategory(MessageCategory.Offers.name)
+                InboxFilter.Archived -> dao.pageArchived()
             }
         }.flow.map { page -> page.map { it.toConversation() } }
 
@@ -143,6 +178,8 @@ internal class MessagesRepositoryImpl @Inject constructor(
         messageCount = messageCount,
         hasAttachment = hasAttachment,
         category = runCatching { MessageCategory.valueOf(category) }.getOrDefault(MessageCategory.Personal),
+        isPinned = pinned,
+        isArchived = archived,
     )
 
     private companion object {

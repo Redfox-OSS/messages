@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import dev.redfox.messages.core.ui.R
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +61,14 @@ fun ConversationRow(
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(ObSpacing.S))
+                if (conversation.isPinned) {
+                    Icon(
+                        painterResource(R.drawable.ic_keep),
+                        contentDescription = "Pinned",
+                        tint = colors.textTertiary,
+                        modifier = Modifier.padding(end = ObSpacing.XXS).size(14.dp),
+                    )
+                }
                 Text(
                     timeLabel,
                     style = type.label,

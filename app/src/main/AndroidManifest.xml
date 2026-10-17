@@ -3,6 +3,8 @@
 
     <!-- Link content in messages (e.g. chatbot card images). Messages themselves never leave the device. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Call button in conversations and the "Call" swipe: calls directly once allowed, else opens the dialler. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
 
     <application
         android:name=".MessagesApplication"

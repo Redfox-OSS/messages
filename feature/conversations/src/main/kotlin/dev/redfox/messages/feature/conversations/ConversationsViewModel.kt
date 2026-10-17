@@ -5,9 +5,13 @@ import androidx.paging.PagingData
 import dev.redfox.messages.core.ui.mvi.cachedOffMain
 import androidx.paging.map
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.redfox.messages.core.domain.usecase.ConversationActionsUseCase
 import dev.redfox.messages.core.domain.usecase.GetDeviceSetupStatusUseCase
 import dev.redfox.messages.core.domain.usecase.InboxFilter
+import dev.redfox.messages.core.domain.usecase.ObserveSettingsUseCase
 import dev.redfox.messages.core.domain.usecase.ObserveSyncStatusUseCase
+import dev.redfox.messages.core.model.Conversation
+import dev.redfox.messages.core.model.SwipeAction
 import dev.redfox.messages.core.domain.usecase.PagedConversationsUseCase
 import dev.redfox.messages.core.domain.usecase.StartInboxSyncUseCase
 import dev.redfox.messages.core.ui.format.TimeFormat
@@ -30,6 +34,8 @@ class ConversationsViewModel @Inject constructor(
     observeSyncStatus: ObserveSyncStatusUseCase,
     private val startInboxSync: StartInboxSyncUseCase,
     private val getDeviceSetupStatus: GetDeviceSetupStatusUseCase,
+    observeSettings: ObserveSettingsUseCase,
+    private val conversationActions: ConversationActionsUseCase,
 ) : MviViewModel<ConversationsState, ConversationsIntent, ConversationsEffect>(ConversationsState()) {
 
     private val timeFormat = TimeFormat()
@@ -46,6 +52,7 @@ class ConversationsViewModel @Inject constructor(
     init {
         filter.bind { copy(filter = it) }
         observeSyncStatus().bind { copy(isIndexing = !it.hasCompletedOnce) }
+        observeSettings().bind { copy(swipeLeft = it.swipeLeft, swipeRight = it.swipeRight) }
         checkAccess()
     }
 
@@ -55,6 +62,29 @@ class ConversationsViewModel @Inject constructor(
             is ConversationsIntent.FilterSelected -> filter.value = intent.filter
             is ConversationsIntent.ConversationClicked -> emit(ConversationsEffect.OpenThread(intent.threadId))
             ConversationsIntent.GrantAccessClicked -> emit(ConversationsEffect.RequestSmsAccess)
+            is ConversationsIntent.Swiped -> {
+                val snapshot = state.value
+                swiped(intent.conversation, if (intent.left) snapshot.swipeLeft else snapshot.swipeRight)
+            }
+            ConversationsIntent.CancelDelete -> reduce { copy(confirmDelete = null) }
+            ConversationsIntent.ConfirmDelete -> {
+                val conversation = state.value.confirmDelete ?: return
+                reduce { copy(confirmDelete = null) }
+                runCatching { conversationActions.delete(conversation) }
+            }
+        }
+    }
+
+    private suspend fun swiped(conversation: Conversation, action: SwipeAction) {
+        runCatching {
+            when (action) {
+                SwipeAction.None -> Unit
+                SwipeAction.Archive -> conversationActions.toggleArchived(conversation)
+                SwipeAction.Delete -> reduce { copy(confirmDelete = conversation) }
+                SwipeAction.ToggleRead -> conversationActions.toggleRead(conversation)
+                SwipeAction.Pin -> conversationActions.togglePinned(conversation)
+                SwipeAction.Call -> callableNumber(conversation)?.let { emit(ConversationsEffect.Call(it)) }
+            }
         }
     }
 
@@ -64,3 +94,7 @@ class ConversationsViewModel @Inject constructor(
         if (granted) startInboxSync()
     }
 }
+
+/** A one-person conversation with a phone number (not a business sender) can be called. */
+internal fun callableNumber(conversation: Conversation): String? =
+    conversation.participants.singleOrNull()?.address?.takeIf { address -> address.none { it.isLetter() } }

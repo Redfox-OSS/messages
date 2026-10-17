@@ -10,14 +10,29 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ConversationDao {
 
-    @Query("SELECT * FROM conversations ORDER BY timestamp DESC, thread_id DESC")
+    // Pinned conversations lead every list; archived ones only appear under "Archived".
+
+    @Query("SELECT * FROM conversations WHERE archived = 0 ORDER BY pinned DESC, timestamp DESC, thread_id DESC")
     fun pageAll(): PagingSource<Int, ConversationEntity>
 
-    @Query("SELECT * FROM conversations WHERE unread_count > 0 ORDER BY timestamp DESC, thread_id DESC")
+    @Query(
+        "SELECT * FROM conversations WHERE archived = 0 AND unread_count > 0 " +
+            "ORDER BY pinned DESC, timestamp DESC, thread_id DESC"
+    )
     fun pageUnread(): PagingSource<Int, ConversationEntity>
 
-    @Query("SELECT * FROM conversations WHERE category = :category ORDER BY timestamp DESC, thread_id DESC")
+    @Query(
+        "SELECT * FROM conversations WHERE archived = 0 AND category = :category " +
+            "ORDER BY pinned DESC, timestamp DESC, thread_id DESC"
+    )
     fun pageByCategory(category: String): PagingSource<Int, ConversationEntity>
+
+    @Query("SELECT * FROM conversations WHERE archived = 1 ORDER BY timestamp DESC, thread_id DESC")
+    fun pageArchived(): PagingSource<Int, ConversationEntity>
+
+    /** Applies a pin / archive change to the index at once, without waiting for the next sync. */
+    @Query("UPDATE conversations SET pinned = :pinned, archived = :archived WHERE thread_id = :threadId")
+    suspend fun setFlags(threadId: Long, pinned: Boolean, archived: Boolean)
 
     @Query("SELECT * FROM conversations WHERE thread_id = :threadId")
     fun observe(threadId: Long): Flow<ConversationEntity?>

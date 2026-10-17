@@ -85,10 +85,10 @@ fun MessagesNavHost(
                 }
             }
             entry<StarredKey> { key ->
-                Reveal(navigator, key) { StarredRoute() }
+                Reveal(navigator, key) { StarredRoute(onOpenThread = { navigator.navigate(ThreadKey(it)) }) }
             }
             entry<ScheduledKey> { key ->
-                Reveal(navigator, key) { ScheduledRoute() }
+                Reveal(navigator, key) { ScheduledRoute(onOpenThread = { navigator.navigate(ThreadKey(it)) }) }
             }
             entry<SettingsKey> { key ->
                 Reveal(navigator, key) {

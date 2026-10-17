@@ -174,6 +174,34 @@ class SmsProviderWriter @Inject constructor(
         resolver.update(Telephony.Mms.CONTENT_URI, values, unread, args)
     }
 
+    /** "Mark unread": the newest incoming SMS or MMS in the thread becomes unread again. */
+    fun markLatestIncomingUnread(threadId: Long) {
+        val values = ContentValues().apply { put(Telephony.Sms.READ, 0) }
+        val sms = newestIncoming(Telephony.Sms.CONTENT_URI, Telephony.Sms.TYPE, TextBasedSmsColumns.MESSAGE_TYPE_INBOX, threadId)
+        val mms = newestIncoming(Telephony.Mms.CONTENT_URI, Telephony.Mms.MESSAGE_BOX, Telephony.BaseMmsColumns.MESSAGE_BOX_INBOX, threadId)
+        // MMS dates are seconds, SMS milliseconds.
+        val target = listOfNotNull(sms, mms?.let { it.first to it.second * 1000 }).maxByOrNull { it.second } ?: return
+        val uri = if (target === sms) Telephony.Sms.CONTENT_URI else Telephony.Mms.CONTENT_URI
+        resolver.update(ContentUris.withAppendedId(uri, target.first), values, null, null)
+    }
+
+    private fun newestIncoming(uri: Uri, boxColumn: String, inbox: Int, threadId: Long): Pair<Long, Long>? =
+        resolver.query(
+            uri,
+            arrayOf(Telephony.Sms._ID, Telephony.Sms.DATE),
+            "${Telephony.Sms.THREAD_ID} = ? AND $boxColumn = ?",
+            arrayOf(threadId.toString(), inbox.toString()),
+            "${Telephony.Sms.DATE} DESC LIMIT 1",
+        )?.use { c -> if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else null }
+
+    /** Deletes a whole conversation (its SMS and MMS). */
+    fun deleteThread(threadId: Long): Int =
+        resolver.delete(ContentUris.withAppendedId(Telephony.Threads.CONTENT_URI, threadId), null, null)
+
+    fun deleteSms(id: Long): Int = resolver.delete(ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, id), null, null)
+
+    fun deleteMms(id: Long): Int = resolver.delete(ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, id), null, null)
+
     fun threadIdFor(addresses: Set<String>): Long = Telephony.Threads.getOrCreateThreadId(context, addresses)
 
     private fun threadIdOf(uri: Uri): Long? = resolver.query(uri, arrayOf(Telephony.Sms.THREAD_ID), null, null, null)

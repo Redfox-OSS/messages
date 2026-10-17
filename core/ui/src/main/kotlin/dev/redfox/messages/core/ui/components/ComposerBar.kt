@@ -62,6 +62,8 @@ fun ComposerBar(
     counter: String?,
     modifier: Modifier = Modifier,
     placeholder: String = "Text message",
+    /** Long-press on send, e.g. to schedule. */
+    onSendLongPress: (() -> Unit)? = null,
 ) {
     val colors = ObsidianTheme.colors
     val type = ObsidianTheme.typography
@@ -111,12 +113,12 @@ fun ComposerBar(
                 )
             }
         }
-        SendButton(enabled = canSend, onClick = onSend)
+        SendButton(enabled = canSend, onClick = onSend, onLongClick = onSendLongPress)
     }
 }
 
 @Composable
-private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
+private fun SendButton(enabled: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)?) {
     val colors = ObsidianTheme.colors
     val fill by animateColorAsState(if (enabled) colors.accent else colors.tile, label = "sendFill")
     val tint by animateColorAsState(if (enabled) colors.onAccent else colors.textDisabled, label = "sendTint")
@@ -126,10 +128,16 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
             .then(if (enabled) Modifier.glow(colors.accent, CircleShape, ObGlows.Action) else Modifier)
             .clip(CircleShape)
             .background(fill)
-            .pressable(enabled = enabled, pressedScale = 0.93f, haptic = HapticFeedbackType.Confirm, onClick = onClick),
+            .pressable(
+                enabled = enabled,
+                pressedScale = 0.93f,
+                haptic = HapticFeedbackType.Confirm,
+                onLongClick = onLongClick,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(R.drawable.ic_send), contentDescription = "Send", tint = tint, modifier = Modifier.size(22.dp))
+        Icon(painterResource(R.drawable.ic_send), contentDescription = "Send. Long-press to schedule.", tint = tint, modifier = Modifier.size(22.dp))
     }
 }
 

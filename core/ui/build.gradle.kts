@@ -15,6 +15,8 @@ dependencies {
     api(libs.kotlinx.collections.immutable)
     api(project(":core:model"))
     implementation(libs.androidx.paging.common)
+    // rememberCaller(): the call-permission request.
+    implementation(libs.androidx.activity.compose)
     implementation(libs.coil.compose)
     // Chatbot card images are remote (https), always loaded.
     implementation(libs.coil.network.okhttp)

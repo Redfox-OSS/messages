@@ -58,6 +58,9 @@ fun MessageBubble(
     /** Well-known services linked in the message ([dev.redfox.messages.core.ui.format.LinkBrands.find]). */
     brandLinks: List<BrandLink> = emptyList(),
     onOpenBrandLink: (BrandLink) -> Unit = {},
+    isStarred: Boolean = false,
+    /** Long-press: the message actions sheet (copy, star, delete). */
+    onLongPress: (() -> Unit)? = null,
 ) {
     val colors = ObsidianTheme.colors
     val type = ObsidianTheme.typography
@@ -83,6 +86,11 @@ fun MessageBubble(
         Column(
             Modifier
                 .widthIn(max = 300.dp)
+                .then(
+                    if (onLongPress != null) {
+                        Modifier.pressable(pressedScale = 0.97f, haptic = HapticFeedbackType.LongPress, onLongClick = onLongPress, onClick = {})
+                    } else Modifier
+                )
                 .clip(shape)
                 .background(if (outgoing) colors.accentContainerStrong else colors.card)
                 .border(1.dp, if (failed) colors.error else if (outgoing) colors.accentBorder else colors.border, shape)
@@ -113,7 +121,7 @@ fun MessageBubble(
             )
         }
         val sending = message.box == MessageBox.Outbox || message.box == MessageBox.Queued
-        if (timeLabel != null || failed || sending) {
+        if (timeLabel != null || failed || sending || isStarred) {
             val retry = if (failed && onRetry != null) {
                 Modifier.pressable(haptic = HapticFeedbackType.ContextClick, onClick = onRetry)
             } else Modifier
@@ -122,6 +130,14 @@ fun MessageBubble(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ObSpacing.XXS),
             ) {
+                if (isStarred) {
+                    Icon(
+                        painterResource(R.drawable.ic_star_filled),
+                        contentDescription = "Starred",
+                        tint = colors.accentLight,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
                 if (failed) {
                     Icon(
                         painterResource(R.drawable.ic_error),

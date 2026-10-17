@@ -32,7 +32,15 @@ import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
 import dev.redfox.messages.core.domain.usecase.InboxFilter
 import dev.redfox.messages.core.ui.R
+import androidx.compose.foundation.background
+import dev.redfox.messages.core.model.Conversation
+import dev.redfox.messages.core.model.SwipeAction
 import dev.redfox.messages.core.ui.components.ConversationRow
+import dev.redfox.messages.core.ui.components.SwipeActionRow
+import dev.redfox.messages.core.ui.components.SwipeVisual
+import dev.redfox.messages.core.ui.platform.rememberCaller
+import dev.redfox.obsidian.components.ObAlertDialog
+import dev.redfox.obsidian.theme.ObsidianTheme
 import dev.redfox.messages.core.ui.components.TabPage
 import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.obsidian.components.ChoicePill
@@ -56,6 +64,7 @@ private val FilterLabels = mapOf(
     InboxFilter.Transactions to "Transactions",
     InboxFilter.Otp to "OTPs",
     InboxFilter.Offers to "Offers",
+    InboxFilter.Archived to "Archived",
 )
 
 /** Rows beyond the first screenful skip the staggered entrance. */
@@ -76,8 +85,10 @@ fun ConversationsRoute(
         viewModel.dispatch(ConversationsIntent.Refresh)
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.dispatch(ConversationsIntent.Refresh) }
+    val call = rememberCaller()
     CollectEffects(viewModel.effects) { effect ->
         when (effect) {
+            is ConversationsEffect.Call -> call(effect.phoneNumber)
             is ConversationsEffect.OpenThread -> onOpenThread(effect.threadId)
             ConversationsEffect.RequestSmsAccess -> permissions.launch(AccessPermissions)
         }
@@ -126,17 +137,37 @@ fun ConversationsScreen(
                     contentType = conversations.itemContentType { "conversation" },
                 ) { index ->
                     val item = conversations[index] ?: return@items
-                    ConversationRow(
-                        conversation = item.conversation,
-                        timeLabel = item.timeLabel,
-                        onClick = { onIntent(ConversationsIntent.ConversationClicked(item.conversation.threadId)) },
+                    val conversation = item.conversation
+                    SwipeActionRow(
+                        left = swipeVisual(state.swipeLeft, conversation),
+                        right = swipeVisual(state.swipeRight, conversation),
+                        onSwipeLeft = { onIntent(ConversationsIntent.Swiped(conversation, left = true)) },
+                        onSwipeRight = { onIntent(ConversationsIntent.Swiped(conversation, left = false)) },
                         modifier = Modifier
                             .animateItem(placementSpec = ObMotion.gentle())
                             // Only the first screenful plays the entrance; paged-in rows just appear.
                             .then(if (index < RevealedRows) Modifier.revealOnEnter(index + 1) else Modifier),
-                    )
+                    ) {
+                        ConversationRow(
+                            conversation = conversation,
+                            timeLabel = item.timeLabel,
+                            onClick = { onIntent(ConversationsIntent.ConversationClicked(conversation.threadId)) },
+                            // Opaque, so the swipe's colour only shows where the row has moved away.
+                            modifier = Modifier.background(ObsidianTheme.colors.background),
+                        )
+                    }
                 }
             }
+        }
+        state.confirmDelete?.let { conversation ->
+            ObAlertDialog(
+                title = "Delete conversation?",
+                text = "All messages with ${conversation.title} are removed from this phone for good.",
+                confirmLabel = "Delete",
+                destructive = true,
+                onConfirm = { onIntent(ConversationsIntent.ConfirmDelete) },
+                onDismiss = { onIntent(ConversationsIntent.CancelDelete) },
+            )
         }
         if (state.hasSmsAccess) {
             Box(Modifier.fillMaxSize()) {
@@ -150,6 +181,26 @@ fun ConversationsScreen(
                 )
             }
         }
+    }
+}
+
+/** What a swipe reveals for this conversation; null when the action doesn't apply (e.g. calling a bank). */
+@Composable
+private fun swipeVisual(action: SwipeAction, conversation: Conversation): SwipeVisual? {
+    val colors = ObsidianTheme.colors
+    return when (action) {
+        SwipeAction.None -> null
+        SwipeAction.Archive ->
+            if (conversation.isArchived) SwipeVisual("Unarchive", R.drawable.ic_unarchive, colors.accent)
+            else SwipeVisual("Archive", R.drawable.ic_archive, colors.accent)
+        SwipeAction.Delete -> SwipeVisual("Delete", R.drawable.ic_delete, colors.error)
+        SwipeAction.ToggleRead ->
+            if (conversation.isUnread) SwipeVisual("Mark read", R.drawable.ic_mark_chat_read, colors.accent)
+            else SwipeVisual("Mark unread", R.drawable.ic_mark_chat_unread, colors.accent)
+        SwipeAction.Pin ->
+            SwipeVisual(if (conversation.isPinned) "Unpin" else "Pin", R.drawable.ic_keep, colors.accent)
+        SwipeAction.Call ->
+            callableNumber(conversation)?.let { SwipeVisual("Call", R.drawable.ic_call, colors.accent) }
     }
 }
 

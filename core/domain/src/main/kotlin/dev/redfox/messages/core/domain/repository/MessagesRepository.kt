@@ -42,6 +42,18 @@ interface MessagesRepository {
 
     /** The system thread for these addresses, created if it doesn't exist yet. */
     suspend fun threadIdFor(addresses: List<String>): Long
+
+    suspend fun setPinned(threadId: Long, pinned: Boolean)
+    suspend fun setArchived(threadId: Long, archived: Boolean)
+
+    /** Unread → read; read → marks the newest incoming message unread. */
+    suspend fun toggleRead(threadId: Long)
+
+    /** Deletes the whole conversation from the SMS/MMS store. Permanent. */
+    suspend fun deleteThread(threadId: Long)
+
+    /** Deletes one message from the store. Permanent. */
+    suspend fun deleteMessage(message: Message)
 }
 
 /** SIMs that can send, for the composer's SIM picker. */

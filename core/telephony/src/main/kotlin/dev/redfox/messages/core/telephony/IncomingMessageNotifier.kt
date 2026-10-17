@@ -16,6 +16,7 @@ import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.redfox.messages.core.domain.OtpExtractor
+import dev.redfox.messages.core.model.VibrationPattern
 import dev.redfox.messages.core.telephony.receiver.NotificationActionReceiver
 import dev.redfox.messages.core.telephony.receiver.OtpCopyReceiver
 import javax.inject.Inject
@@ -121,7 +122,7 @@ class IncomingMessageNotifier @Inject constructor(
     }
 
     private fun baseMessage(id: Int, contentIntent: PendingIntent?) =
-        NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+        NotificationCompat.Builder(context, messagesChannelId())
             .setSmallIcon(R.drawable.ic_stat_message)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -188,15 +189,43 @@ class IncomingMessageNotifier @Inject constructor(
     private fun canNotify() = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
         PackageManager.PERMISSION_GRANTED
 
+    /**
+     * Switches message notifications to [pattern]. Android fixes a channel's vibration when it's
+     * created, so each pattern has its own channel; the old one is deleted.
+     */
+    fun applyVibration(pattern: VibrationPattern) {
+        prefs.edit().putString(KEY_VIBRATION, pattern.name).apply()
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val keep = messagesChannelId()
+        manager.notificationChannels
+            .filter { (it.id == LEGACY_CHANNEL_MESSAGES || it.id.startsWith(CHANNEL_MESSAGES_PREFIX)) && it.id != keep }
+            .forEach { manager.deleteNotificationChannel(it.id) }
+        ensureChannels()
+    }
+
+    private val prefs by lazy { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
+
+    private fun currentVibration(): VibrationPattern =
+        prefs.getString(KEY_VIBRATION, null)?.let { name -> VibrationPattern.entries.firstOrNull { it.name == name } }
+            ?: VibrationPattern.Default
+
+    private fun messagesChannelId() = CHANNEL_MESSAGES_PREFIX + currentVibration().name.lowercase()
+
     private fun ensureChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL_MESSAGES) == null) {
+        val messagesChannel = messagesChannelId()
+        if (manager.getNotificationChannel(messagesChannel) == null) {
+            val pattern = currentVibration()
             manager.createNotificationChannel(
                 NotificationChannel(
-                    CHANNEL_MESSAGES,
+                    messagesChannel,
                     context.getString(R.string.channel_incoming_messages),
                     NotificationManager.IMPORTANCE_HIGH,
-                ).apply { description = context.getString(R.string.channel_incoming_messages_description) }
+                ).apply {
+                    description = context.getString(R.string.channel_incoming_messages_description)
+                    enableVibration(pattern.timings != null)
+                    pattern.timings?.let { vibrationPattern = it }
+                }
             )
         }
         if (manager.getNotificationChannel(CHANNEL_OTP) == null) {
@@ -215,7 +244,11 @@ class IncomingMessageNotifier @Inject constructor(
 
     internal companion object {
         const val TAG = "IncomingNotifier"
-        const val CHANNEL_MESSAGES = "incoming_messages"
+        /** Before vibration options, the single messages channel. */
+        const val LEGACY_CHANNEL_MESSAGES = "incoming_messages"
+        const val CHANNEL_MESSAGES_PREFIX = "messages_"
+        const val PREFS = "notifications"
+        const val KEY_VIBRATION = "vibration"
         const val CHANNEL_OTP = "otp_codes"
         const val MMS_NOTIFICATION_ID = 0x4D4D53
         const val OTP_NOTIFICATION_ID = 0x4F5450

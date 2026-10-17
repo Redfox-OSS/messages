@@ -8,8 +8,8 @@ import dev.redfox.messages.core.model.SyncStatus
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
-/** Inbox filter chips. [All] and [Unread] cut across categories. */
-enum class InboxFilter { All, Unread, Personal, Transactions, Otp, Offers }
+/** Inbox filter chips. [All] and [Unread] cut across categories; only [Archived] shows archived threads. */
+enum class InboxFilter { All, Unread, Personal, Transactions, Otp, Offers, Archived }
 
 class StartInboxSyncUseCase @Inject constructor(
     private val repository: MessagesRepository,

@@ -7,6 +7,8 @@ import dev.redfox.messages.core.common.MessagesDispatcher
 import dev.redfox.messages.core.contacts.ContactResolver
 import dev.redfox.messages.core.database.ConversationDao
 import dev.redfox.messages.core.database.ConversationEntity
+import dev.redfox.messages.core.database.ConversationPrefsDao
+import dev.redfox.messages.core.database.ConversationPrefsEntity
 import dev.redfox.messages.core.domain.MessageCategorizer
 import dev.redfox.messages.core.model.SyncStatus
 import dev.redfox.messages.core.telephony.read.ProviderChanges
@@ -35,6 +37,7 @@ internal class ConversationIndexer @Inject constructor(
     private val contacts: ContactResolver,
     private val changes: ProviderChanges,
     private val dao: ConversationDao,
+    private val prefsDao: ConversationPrefsDao,
     @param:ApplicationScope private val scope: CoroutineScope,
     @param:Dispatcher(MessagesDispatcher.IO) private val io: CoroutineDispatcher,
 ) {
@@ -53,7 +56,8 @@ internal class ConversationIndexer @Inject constructor(
     private suspend fun syncOnce() {
         _status.update { it.copy(isSyncing = true) }
         try {
-            val (snapshot, took) = measureTimedValue { buildSnapshot() }
+            val prefs = prefsDao.all().associateBy { it.threadId }
+            val (snapshot, took) = measureTimedValue { buildSnapshot(prefs) }
             val wrote = dao.sync(snapshot)
             Log.d(TAG, "Indexed ${snapshot.size} conversations in $took (changed=$wrote)")
             _status.update { SyncStatus(isSyncing = false, hasCompletedOnce = true) }
@@ -67,7 +71,7 @@ internal class ConversationIndexer @Inject constructor(
         }
     }
 
-    private fun buildSnapshot(): List<ConversationEntity> {
+    private fun buildSnapshot(prefs: Map<Long, ConversationPrefsEntity>): List<ConversationEntity> {
         val threads = reader.readThreads()
         val people = contacts.resolveAll(threads.flatMap { it.addresses })
         return threads.map { t ->
@@ -82,6 +86,8 @@ internal class ConversationIndexer @Inject constructor(
                 messageCount = t.messageCount,
                 hasAttachment = t.hasAttachment,
                 category = MessageCategorizer.categorize(participants, t.snippet).name,
+                pinned = prefs[t.threadId]?.pinned == true,
+                archived = prefs[t.threadId]?.archived == true,
             )
         }
     }

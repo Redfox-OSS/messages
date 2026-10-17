@@ -1,6 +1,32 @@
 package dev.redfox.messages.feature.thread
 
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
+import dev.redfox.messages.core.model.ScheduledMessage
+import dev.redfox.messages.core.ui.R
+import dev.redfox.messages.core.ui.components.ObSheet
+import dev.redfox.messages.core.ui.components.SchedulePicker
+import dev.redfox.messages.core.ui.components.SheetAction
+import dev.redfox.messages.core.ui.components.formatScheduleTime
+import dev.redfox.messages.core.ui.platform.rememberCaller
+import dev.redfox.obsidian.components.HeaderIconButton
+import dev.redfox.obsidian.components.ObAlertDialog
+import dev.redfox.obsidian.effects.glassEffect
+import dev.redfox.obsidian.theme.ObsidianTheme
+import dev.redfox.obsidian.theme.ScreenGutter
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -80,6 +106,7 @@ fun ThreadRoute(
     var scrollToSent by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
+    val call = rememberCaller()
     CollectEffects(viewModel.effects) { effect ->
         when (effect) {
             is ThreadEffect.OpenUrl -> runCatching { uriHandler.openUri(effect.url) }
@@ -89,6 +116,9 @@ fun ThreadRoute(
             }
             // The sent message isn't in the list yet; FollowNewest scrolls once it lands.
             ThreadEffect.ScrollToNewest -> scrollToSent = true
+            is ThreadEffect.CopyText -> context.getSystemService(ClipboardManager::class.java)
+                .setPrimaryClip(ClipData.newPlainText("Message", effect.text))
+            is ThreadEffect.Call -> call(effect.phoneNumber)
         }
     }
     FollowNewest(rows, listState, scrollToSent = { scrollToSent }, onScrolled = { scrollToSent = false })
@@ -115,7 +145,15 @@ fun ThreadScreen(
     // The composer floats over the list; the list's end padding follows its real height.
     var composerHeight by remember { mutableIntStateOf(0) }
 
-    DetailPage(title = state.title, onBack = onBack) { padding ->
+    DetailPage(
+        title = state.title,
+        onBack = onBack,
+        actions = {
+            if (state.callableNumber != null) {
+                HeaderIconButton(R.drawable.ic_call, contentDescription = "Call", onClick = { onIntent(ThreadIntent.CallClicked) })
+            }
+        },
+    ) { padding ->
         // The keyboard pushes list and composer up together.
         Box(Modifier.fillMaxSize().imePadding()) {
             LazyColumn(
@@ -161,6 +199,8 @@ fun ThreadScreen(
                                 onRetry = { onIntent(ThreadIntent.Retry(row.message)) },
                                 brandLinks = row.brandLinks,
                                 onOpenBrandLink = { onIntent(ThreadIntent.OpenBrandLink(it)) },
+                                isStarred = row.message.key in state.starredKeys,
+                                onLongPress = { onIntent(ThreadIntent.MessageLongPressed(row.message)) },
                                 modifier = reveal.padding(
                                     // Tight gap inside a run, a breath between runs.
                                     top = if (layout.position == BubblePosition.Middle || layout.position == BubblePosition.Last) 2.dp
@@ -177,7 +217,14 @@ fun ThreadScreen(
                 .onSizeChanged { composerHeight = it.height }
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(bottom = ObSpacing.S)
-            if (state.canReply) {
+            if (state.canReply) Column(composerModifier, verticalArrangement = Arrangement.spacedBy(ObSpacing.XS)) {
+                state.scheduled.forEach { scheduled ->
+                    ScheduledStrip(
+                        scheduled = scheduled,
+                        onSendNow = { onIntent(ThreadIntent.SendScheduledNow(scheduled.id)) },
+                        onCancel = { onIntent(ThreadIntent.CancelScheduled(scheduled.id)) },
+                    )
+                }
                 ComposerBar(
                     text = state.draft,
                     onTextChange = { onIntent(ThreadIntent.DraftChanged(it)) },
@@ -187,7 +234,7 @@ fun ThreadScreen(
                     showSim = state.showSimPicker,
                     onSimClick = { onIntent(ThreadIntent.SwitchSim) },
                     counter = state.counter,
-                    modifier = composerModifier,
+                    onSendLongPress = { onIntent(ThreadIntent.ScheduleClicked) },
                 )
             } else if (state.recipients.isNotEmpty()) {
                 ComposerNotice(
@@ -197,6 +244,64 @@ fun ThreadScreen(
                 )
             }
         }
+    }
+
+    state.actionsFor?.let { message ->
+        ObSheet(onDismiss = { onIntent(ThreadIntent.DismissActions) }) {
+            if (message.body.isNotEmpty()) {
+                SheetAction("Copy text", R.drawable.ic_content_copy, onClick = { onIntent(ThreadIntent.CopyMessage) })
+            }
+            val starred = message.key in state.starredKeys
+            SheetAction(
+                if (starred) "Unstar" else "Star",
+                if (starred) R.drawable.ic_star_filled else R.drawable.ic_star,
+                onClick = { onIntent(ThreadIntent.ToggleStar) },
+            )
+            SheetAction("Delete", R.drawable.ic_delete, destructive = true, onClick = { onIntent(ThreadIntent.DeleteMessage) })
+        }
+    }
+    if (state.confirmDelete != null) {
+        ObAlertDialog(
+            title = "Delete this message?",
+            text = "It's removed from this phone for good.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onConfirm = { onIntent(ThreadIntent.ConfirmDelete) },
+            onDismiss = { onIntent(ThreadIntent.CancelDelete) },
+        )
+    }
+    if (state.showSchedulePicker) {
+        SchedulePicker(onPick = { onIntent(ThreadIntent.ScheduleAt(it)) }, onDismiss = { onIntent(ThreadIntent.DismissSchedule) })
+    }
+}
+
+/** A scheduled message waiting above the composer: when, a preview, send now or cancel. */
+@Composable
+private fun ScheduledStrip(scheduled: ScheduledMessage, onSendNow: () -> Unit, onCancel: () -> Unit) {
+    val colors = ObsidianTheme.colors
+    val type = ObsidianTheme.typography
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = ScreenGutter - ObSpacing.XXS)
+            .clip(RoundedCornerShape(20.dp))
+            .glassEffect(colors.navScrim)
+            .border(1.dp, if (scheduled.failed) colors.error else colors.accentBorder, RoundedCornerShape(20.dp))
+            .padding(start = ObSpacing.L, end = ObSpacing.XS, top = ObSpacing.XS, bottom = ObSpacing.XS),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ObSpacing.S),
+    ) {
+        Icon(painterResource(R.drawable.ic_schedule_send), contentDescription = null, tint = colors.accentLight, modifier = Modifier.size(18.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (scheduled.failed) "Couldn't send · tap Send now to retry" else formatScheduleTime(scheduled.sendAt),
+                style = type.labelStrong,
+                color = if (scheduled.failed) colors.error else colors.accentLight,
+            )
+            Text(scheduled.body, style = type.label, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        HeaderIconButton(R.drawable.ic_send, contentDescription = "Send now", onClick = onSendNow, tint = colors.textSecondary)
+        HeaderIconButton(R.drawable.ic_close, contentDescription = "Cancel scheduled message", onClick = onCancel, tint = colors.textSecondary)
     }
 }
 
