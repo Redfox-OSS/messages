@@ -12,4 +12,5 @@ dependencies {
     implementation(project(":core:domain"))
     api(project(":core:mms"))
     implementation(libs.androidx.core.ktx)
+    testImplementation(libs.junit)
 }

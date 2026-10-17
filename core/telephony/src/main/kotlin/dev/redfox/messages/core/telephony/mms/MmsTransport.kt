@@ -53,7 +53,7 @@ class MmsTransport @Inject constructor(
             .setData(notificationUri)
             .putExtra(EXTRA_FILE, file.absolutePath)
             .putExtra(EXTRA_SUB_ID, subId)
-        smsManager(subId).downloadMultimediaMessage(context, contentLocation, fileUri(file), null, broadcast(intent))
+        smsManager(subId).downloadMultimediaMessage(context, contentLocation, fileUri(file), headers(subId), broadcast(intent))
     }
 
     /** Sends a failed MMS again: the stored copy is replaced by a fresh one (it moves to the bottom). */
@@ -98,7 +98,7 @@ class MmsTransport @Inject constructor(
                 .setAction(ACTION_SENT)
                 .setData(uri)
                 .putExtra(EXTRA_FILE, file.absolutePath)
-            smsManager(sub).sendMultimediaMessage(context, fileUri(file), null, null, broadcast(intent))
+            smsManager(sub).sendMultimediaMessage(context, fileUri(file), null, headers(sub), broadcast(intent))
         } catch (e: Exception) {
             // The message is already in the conversation: it shows as failed (tap to retry),
             // never also back in the composer, where it would be sent twice.
@@ -115,7 +115,7 @@ class MmsTransport @Inject constructor(
     fun acknowledge(transactionId: ByteArray, subId: Int) = runCatching {
         val ack = NotifyRespInd(PduHeaders.CURRENT_MMS_VERSION, transactionId, PduHeaders.STATUS_RETRIEVED)
         val file = newFile("ack").apply { writeBytes(PduComposer(context, ack).make()) }
-        smsManager(subId).sendMultimediaMessage(context, fileUri(file), null, null, null)
+        smsManager(subId).sendMultimediaMessage(context, fileUri(file), null, headers(subId), null)
     }.onFailure { Log.w(TAG, "Couldn't acknowledge MMS", it) }
 
     /** The carrier's maximum MMS size in bytes, to size photos and voice notes to fit. */
@@ -174,6 +174,20 @@ class MmsTransport @Inject constructor(
         // Mutable: the MMS service adds the result PDU to the intent. The explicit component keeps it ours.
         PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
+
+    /**
+     * The phone-identifying headers the carrier's MMS server expects, where the carrier config
+     * leaves them empty (see [MmsHeaders]).
+     */
+    private fun headers(subId: Int): android.os.Bundle? {
+        val config = runCatching { smsManager(subId).carrierConfigValues }.getOrNull()
+        val headers = MmsHeaders.overrides(
+            carrierUserAgent = config?.getString(SmsManager.MMS_CONFIG_USER_AGENT),
+            carrierUaProfUrl = config?.getString(SmsManager.MMS_CONFIG_UA_PROF_URL),
+        )
+        Log.w(TAG, "MMS headers: UA=${headers.userAgent ?: "(carrier)"} profile=${headers.uaProfUrl ?: "(carrier)"}")
+        return headers.toBundle()
+    }
 
     private fun smsManager(subId: Int): SmsManager {
         val manager = context.getSystemService(SmsManager::class.java)
