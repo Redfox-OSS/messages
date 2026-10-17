@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.redfox.messages.core.domain.OtpExtractor
 import dev.redfox.messages.core.model.VibrationPattern
+import dev.redfox.messages.core.telephony.mms.StoredMms
 import dev.redfox.messages.core.telephony.receiver.NotificationActionReceiver
 import dev.redfox.messages.core.telephony.receiver.OtpCopyReceiver
 import javax.inject.Inject
@@ -50,22 +51,30 @@ class IncomingMessageNotifier @Inject constructor(
         if (otp != null) postOtpLiveUpdate(otp, sender = SenderLabel.of(sms.address))
     }
 
-    fun notifyMms() {
-        if (!canNotify()) return
-        ensureChannels()
-        val notification = baseMessage(MMS_NOTIFICATION_ID, launchIntent(threadId = -1, address = null))
-            .setContentTitle(context.getString(R.string.notification_mms_title))
-            .setContentText(context.getString(R.string.notification_mms_text))
-            .build()
-        NotificationManagerCompat.from(context).notify(MMS_NOTIFICATION_ID, notification)
+    /** A downloaded MMS: shown like an SMS, with "Photo" / "Voice message" when there's no text. */
+    fun notifyMms(mms: StoredMms) {
+        val label = mms.text ?: when {
+            mms.mediaTypes.any { it.startsWith("image/") } -> context.getString(R.string.notification_mms_photo)
+            mms.mediaTypes.any { it.startsWith("audio/") } -> context.getString(R.string.notification_mms_audio)
+            mms.mediaTypes.any { it.startsWith("video/") } -> context.getString(R.string.notification_mms_video)
+            else -> context.getString(R.string.notification_mms_attachment)
+        }
+        notifySms(
+            IncomingSms(
+                address = mms.from ?: context.getString(R.string.notification_mms_unknown_sender),
+                body = label,
+                uri = mms.uri,
+                threadId = mms.threadId,
+            )
+        )
     }
 
     /** A message we sent was rejected by the network. */
-    fun notifySendFailed(address: String) {
+    fun notifySendFailed(address: String, threadId: Long = -1) {
         if (!canNotify()) return
         ensureChannels()
         val id = FAILED_ID_BASE + address.hashCode()
-        val notification = baseMessage(id, launchIntent(threadId = -1, address = address))
+        val notification = baseMessage(id, launchIntent(threadId = threadId, address = address.takeIf { threadId <= 0 }))
             .setContentTitle(context.getString(R.string.notification_send_failed_title))
             .setContentText(context.getString(R.string.notification_send_failed_text, address))
             .build()
@@ -250,7 +259,6 @@ class IncomingMessageNotifier @Inject constructor(
         const val PREFS = "notifications"
         const val KEY_VIBRATION = "vibration"
         const val CHANNEL_OTP = "otp_codes"
-        const val MMS_NOTIFICATION_ID = 0x4D4D53
         const val OTP_NOTIFICATION_ID = 0x4F5450
         const val FAILED_ID_BASE = 0x464149
         const val OTP_VISIBLE_MILLIS = 5_000L

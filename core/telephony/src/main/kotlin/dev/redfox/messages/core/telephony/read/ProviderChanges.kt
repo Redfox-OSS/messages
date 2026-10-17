@@ -31,7 +31,9 @@ class ProviderChanges @Inject constructor(
                 trySend(Unit)
             }
         }
-        context.contentResolver.registerContentObserver(MMS_SMS, true, observer)
+        // Providers differ in which URI they announce a change on (Samsung notifies MMS updates
+        // on content://mms only), so listen on all three.
+        WATCHED.forEach { context.contentResolver.registerContentObserver(it, true, observer) }
         awaitClose { context.contentResolver.unregisterContentObserver(observer) }
     }
         .debounce(250)
@@ -39,6 +41,6 @@ class ProviderChanges @Inject constructor(
         .conflate()
 
     private companion object {
-        val MMS_SMS = "content://mms-sms/".toUri()
+        val WATCHED = listOf("content://mms-sms/".toUri(), "content://mms/".toUri(), "content://sms/".toUri())
     }
 }

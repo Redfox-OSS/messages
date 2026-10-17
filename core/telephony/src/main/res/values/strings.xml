@@ -14,6 +14,10 @@
     <string name="notification_mark_read">Mark as read</string>
     <string name="notification_send_failed_title">Message not sent</string>
     <string name="notification_send_failed_text">To %1$s. Open the conversation to try again.</string>
-    <string name="notification_mms_title">Multimedia message received</string>
-    <string name="notification_mms_text">MMS support is not ready yet. The message is still on your carrier\'s server.</string>
+    <string name="notification_mms_photo">Photo</string>
+    <string name="notification_mms_audio">Voice message</string>
+    <string name="notification_mms_video">Video</string>
+    <string name="notification_mms_attachment">Attachment</string>
+    <string name="notification_mms_unknown_sender">Unknown sender</string>
+    <string name="notification_mms_group">Group message</string>
 </resources>

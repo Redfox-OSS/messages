@@ -52,6 +52,19 @@ data class Attachment(
     val isAudio: Boolean get() = mimeType.startsWith("audio/")
 }
 
+/** Media picked or recorded for an outgoing message, before it's packed into an MMS. */
+data class OutgoingAttachment(
+    /** content:// or file:// URI the app can read. */
+    val uri: String,
+    val mimeType: String,
+    val name: String? = null,
+    /** Length of a voice note, for its chip. */
+    val durationMillis: Long? = null,
+) {
+    val isImage: Boolean get() = mimeType.startsWith("image/")
+    val isAudio: Boolean get() = mimeType.startsWith("audio/")
+}
+
 data class Message(
     val id: Long,
     val threadId: Long,
@@ -68,6 +81,8 @@ data class Message(
     val subject: String? = null,
     /** True for an MMS whose content hasn't been downloaded from the carrier yet. */
     val isPendingDownload: Boolean = false,
+    /** A pending MMS whose download failed; tapping it retries. */
+    val isDownloadFailed: Boolean = false,
     /** A business chatbot card (RCS Business Messaging) stored alongside SMS/MMS, already parsed. */
     val rich: RichContent? = null,
     /** Delivery report for an outgoing SMS; [DeliveryStatus.None] when none was requested. */

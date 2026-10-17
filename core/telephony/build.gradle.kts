@@ -10,5 +10,6 @@ android {
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:domain"))
+    api(project(":core:mms"))
     implementation(libs.androidx.core.ktx)
 }

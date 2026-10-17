@@ -21,6 +21,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import dev.redfox.messages.core.model.OutgoingAttachment
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,11 +75,22 @@ fun ComposerBar(
     placeholder: String = "Text message",
     /** Long-press on send, e.g. to schedule. */
     onSendLongPress: (() -> Unit)? = null,
+    /** Photos and voice notes waiting to go with the message. */
+    attachments: List<OutgoingAttachment> = emptyList(),
+    onRemoveAttachment: (OutgoingAttachment) -> Unit = {},
+    /** Shows the add-photo button. */
+    onAttachClick: (() -> Unit)? = null,
+    /** Shows a mic in place of send while there's nothing to send. */
+    onMicClick: (() -> Unit)? = null,
+    /** Non-null while a voice note is recording: how long so far. */
+    recordingMillis: Long? = null,
+    onStopRecording: () -> Unit = {},
+    onCancelRecording: () -> Unit = {},
 ) {
     val colors = ObsidianTheme.colors
     val type = ObsidianTheme.typography
 
-    Row(
+    Column(
         modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenGutter - ObSpacing.XXS)
@@ -76,10 +98,56 @@ fun ComposerBar(
             .clip(ComposerShape)
             .glassEffect(colors.navScrim)
             .border(1.dp, colors.borderStrong, ComposerShape)
-            .padding(start = ObSpacing.XS, end = ObSpacing.XS, top = ObSpacing.XS, bottom = ObSpacing.XS),
+            .padding(ObSpacing.XS),
+    ) {
+        if (attachments.isNotEmpty()) {
+            AttachmentStrip(attachments, onRemoveAttachment)
+        }
+        if (recordingMillis != null) {
+            RecordingRow(recordingMillis, onStop = onStopRecording, onCancel = onCancelRecording)
+        } else {
+            ComposeRow(
+                text = text,
+                onTextChange = onTextChange,
+                onSend = onSend,
+                canSend = canSend,
+                sim = sim,
+                showSim = showSim,
+                onSimClick = onSimClick,
+                counter = counter,
+                placeholder = placeholder,
+                onSendLongPress = onSendLongPress,
+                onAttachClick = onAttachClick,
+                onMicClick = onMicClick,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ComposeRow(
+    text: String,
+    onTextChange: (String) -> Unit,
+    onSend: () -> Unit,
+    canSend: Boolean,
+    sim: SimCard?,
+    showSim: Boolean,
+    onSimClick: () -> Unit,
+    counter: String?,
+    placeholder: String,
+    onSendLongPress: (() -> Unit)?,
+    onAttachClick: (() -> Unit)?,
+    onMicClick: (() -> Unit)?,
+) {
+    val colors = ObsidianTheme.colors
+    val type = ObsidianTheme.typography
+    Row(
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(ObSpacing.XS),
     ) {
+        if (onAttachClick != null) {
+            RoundIconButton(R.drawable.ic_add_photo_alternate, "Add photo", onClick = onAttachClick)
+        }
         if (showSim && sim != null) {
             SimBadge(sim, onClick = onSimClick, modifier = Modifier.padding(bottom = 6.dp))
         }
@@ -87,7 +155,7 @@ fun ComposerBar(
             Modifier
                 .weight(1f)
                 .heightIn(min = SendSize)
-                .padding(start = if (showSim) 0.dp else ObSpacing.M),
+                .padding(start = if (showSim || onAttachClick != null) 0.dp else ObSpacing.M),
             verticalArrangement = Arrangement.Center,
         ) {
             AnimatedVisibility(visible = counter != null, enter = fadeIn(), exit = fadeOut()) {
@@ -113,7 +181,93 @@ fun ComposerBar(
                 )
             }
         }
-        SendButton(enabled = canSend, onClick = onSend, onLongClick = onSendLongPress)
+        if (!canSend && onMicClick != null) {
+            RoundIconButton(R.drawable.ic_mic, "Record voice message", onClick = onMicClick, filled = true)
+        } else {
+            SendButton(enabled = canSend, onClick = onSend, onLongClick = onSendLongPress)
+        }
+    }
+}
+
+/** While recording: a pulsing dot and the time, cancel, and stop (which adds the note to the message). */
+@Composable
+private fun RecordingRow(elapsedMillis: Long, onStop: () -> Unit, onCancel: () -> Unit) {
+    val colors = ObsidianTheme.colors
+    val pulse by rememberInfiniteTransition(label = "rec").animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+        label = "recDot",
+    )
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = SendSize),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ObSpacing.M),
+    ) {
+        RoundIconButton(R.drawable.ic_close, "Cancel recording", onClick = onCancel)
+        Box(Modifier.size(10.dp).alpha(pulse).clip(CircleShape).background(colors.error))
+        Text(formatDuration(elapsedMillis), style = ObsidianTheme.typography.bodyLarge, color = colors.textPrimary, modifier = Modifier.weight(1f))
+        RoundIconButton(R.drawable.ic_stop, "Stop recording", onClick = onStop, filled = true)
+    }
+}
+
+/** Thumbnails and voice-note chips above the field, each removable. */
+@Composable
+private fun AttachmentStrip(attachments: List<OutgoingAttachment>, onRemove: (OutgoingAttachment) -> Unit) {
+    val colors = ObsidianTheme.colors
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(ObSpacing.XS),
+        horizontalArrangement = Arrangement.spacedBy(ObSpacing.S),
+    ) {
+        attachments.forEach { attachment ->
+            Box {
+                if (attachment.isImage) {
+                    AsyncImage(
+                        model = attachment.uri,
+                        contentDescription = "Photo to send",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(72.dp).clip(RoundedCornerShape(14.dp)).background(colors.tile),
+                    )
+                } else {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(14.dp)).background(colors.tile).padding(horizontal = ObSpacing.S),
+                    ) { AudioPlayerView(attachment.uri) }
+                }
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(ObSpacing.XXS)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .pressable { onRemove(attachment) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(painterResource(R.drawable.ic_close), contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoundIconButton(icon: Int, description: String, onClick: () -> Unit, filled: Boolean = false) {
+    val colors = ObsidianTheme.colors
+    Box(
+        Modifier
+            .size(SendSize)
+            .then(if (filled) Modifier.glow(colors.accent, CircleShape, ObGlows.Action) else Modifier)
+            .clip(CircleShape)
+            .background(if (filled) colors.accent else Color.Transparent)
+            .pressable(pressedScale = 0.93f, haptic = HapticFeedbackType.ContextClick, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(icon),
+            contentDescription = description,
+            tint = if (filled) colors.onAccent else colors.textSecondary,
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 

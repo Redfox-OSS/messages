@@ -8,4 +8,6 @@ android {
 
 dependencies {
     implementation(libs.androidx.paging.compose)
+    // Photo picker and microphone permission.
+    implementation(libs.androidx.activity.compose)
 }

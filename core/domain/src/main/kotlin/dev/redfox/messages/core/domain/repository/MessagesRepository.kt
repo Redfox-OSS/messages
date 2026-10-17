@@ -5,6 +5,7 @@ import dev.redfox.messages.core.domain.usecase.InboxFilter
 import dev.redfox.messages.core.model.Contact
 import dev.redfox.messages.core.model.Conversation
 import dev.redfox.messages.core.model.Message
+import dev.redfox.messages.core.model.OutgoingAttachment
 import dev.redfox.messages.core.model.SimCard
 import dev.redfox.messages.core.model.SyncStatus
 import kotlinx.coroutines.flow.Flow
@@ -34,8 +35,20 @@ interface MessagesRepository {
      */
     suspend fun sendSms(addresses: List<String>, body: String, subscriptionId: Int)
 
-    /** Re-sends a failed outgoing SMS in place. */
+    /**
+     * Sends one MMS to all [addresses] together (a group message when there are several):
+     * text and/or media. Photos are shrunk to fit the carrier's size limit.
+     */
+    suspend fun sendMms(addresses: List<String>, body: String, attachments: List<OutgoingAttachment>, subscriptionId: Int)
+
+    /** Re-sends a failed outgoing message in place (SMS or MMS). */
     suspend fun retry(message: Message)
+
+    /** Retries downloading an MMS whose download failed. */
+    suspend fun retryDownload(message: Message)
+
+    /** The carrier's MMS size limit in bytes, e.g. to cap a voice note's length. */
+    suspend fun maxMmsSize(subscriptionId: Int): Int
 
     /** Marks every message in the thread read and clears its notification. */
     suspend fun markRead(threadId: Long)

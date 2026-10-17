@@ -1,6 +1,17 @@
 package dev.redfox.messages.feature.thread
 
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.DisposableEffect
+import androidx.core.content.ContextCompat
+import dev.redfox.messages.core.model.OutgoingAttachment
+import dev.redfox.messages.core.ui.platform.VoiceNote
+import dev.redfox.messages.core.ui.platform.VoiceRecorder
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.foundation.border
@@ -89,6 +100,11 @@ data class ThreadKey(
     val draft: String? = null,
 ) : NavKey
 
+private const val MAX_PICK = 5
+
+/** Share of the MMS limit a voice note may use (the rest: headers, text). */
+private const val VOICE_SHARE = 0.85
+
 /** Only the newest screenful plays the entrance; older history just appears. */
 private const val RevealedRows = 12
 
@@ -107,6 +123,23 @@ fun ThreadRoute(
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
     val call = rememberCaller()
+    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_PICK)) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.dispatch(
+                ThreadIntent.AddAttachments(
+                    uris.map { OutgoingAttachment(it.toString(), context.contentResolver.getType(it) ?: "image/jpeg") }
+                )
+            )
+        }
+    }
+    val voice = rememberVoiceNoteRecorder(
+        maxBytes = { (state.maxMmsBytes * VOICE_SHARE).toInt() },
+        onRecorded = { note ->
+            viewModel.dispatch(
+                ThreadIntent.AddAttachments(listOf(OutgoingAttachment(note.uri.toString(), note.mimeType, durationMillis = note.durationMillis)))
+            )
+        },
+    )
     CollectEffects(viewModel.effects) { effect ->
         when (effect) {
             is ThreadEffect.OpenUrl -> runCatching { uriHandler.openUri(effect.url) }
@@ -119,6 +152,7 @@ fun ThreadRoute(
             is ThreadEffect.CopyText -> context.getSystemService(ClipboardManager::class.java)
                 .setPrimaryClip(ClipData.newPlainText("Message", effect.text))
             is ThreadEffect.Call -> call(effect.phoneNumber)
+            is ThreadEffect.ShowError -> Toast.makeText(context, effect.message, Toast.LENGTH_LONG).show()
         }
     }
     FollowNewest(rows, listState, scrollToSent = { scrollToSent }, onScrolled = { scrollToSent = false })
@@ -129,6 +163,11 @@ fun ThreadRoute(
         timeFormat = viewModel.timeFormat,
         onBack = onBack,
         onIntent = viewModel::dispatch,
+        recordingMillis = voice.elapsedMillis,
+        onAttachPhotos = { photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onRecord = voice.start,
+        onStopRecording = voice.stop,
+        onCancelRecording = voice.cancel,
     )
 }
 
@@ -140,6 +179,11 @@ fun ThreadScreen(
     timeFormat: TimeFormat,
     onBack: () -> Unit,
     onIntent: (ThreadIntent) -> Unit,
+    recordingMillis: Long? = null,
+    onAttachPhotos: () -> Unit = {},
+    onRecord: () -> Unit = {},
+    onStopRecording: () -> Unit = {},
+    onCancelRecording: () -> Unit = {},
 ) {
     val density = LocalDensity.current
     // The composer floats over the list; the list's end padding follows its real height.
@@ -201,6 +245,7 @@ fun ThreadScreen(
                                 onOpenBrandLink = { onIntent(ThreadIntent.OpenBrandLink(it)) },
                                 isStarred = row.message.key in state.starredKeys,
                                 onLongPress = { onIntent(ThreadIntent.MessageLongPressed(row.message)) },
+                                onRetryDownload = { onIntent(ThreadIntent.RetryDownload(row.message)) },
                                 modifier = reveal.padding(
                                     // Tight gap inside a run, a breath between runs.
                                     top = if (layout.position == BubblePosition.Middle || layout.position == BubblePosition.Last) 2.dp
@@ -235,13 +280,17 @@ fun ThreadScreen(
                     onSimClick = { onIntent(ThreadIntent.SwitchSim) },
                     counter = state.counter,
                     onSendLongPress = { onIntent(ThreadIntent.ScheduleClicked) },
+                    placeholder = if (state.sendsAsMms) "MMS message" else "Text message",
+                    attachments = state.attachments,
+                    onRemoveAttachment = { onIntent(ThreadIntent.RemoveAttachment(it)) },
+                    onAttachClick = onAttachPhotos,
+                    onMicClick = onRecord,
+                    recordingMillis = recordingMillis,
+                    onStopRecording = onStopRecording,
+                    onCancelRecording = onCancelRecording,
                 )
             } else if (state.recipients.isNotEmpty()) {
-                ComposerNotice(
-                    if (!state.acceptsReplies) "This sender doesn't accept replies"
-                    else "Group replies need MMS, which isn't supported yet",
-                    composerModifier,
-                )
+                ComposerNotice("This sender doesn't accept replies", composerModifier)
             }
         }
     }
@@ -333,6 +382,56 @@ private fun FollowNewest(
                 newest = key
             }
     }
+}
+
+/** The voice-note recorder for a screen: asks for the mic once, ticks the timer, cleans up on leave. */
+private class VoiceNoteController(
+    val elapsedMillis: Long?,
+    val start: () -> Unit,
+    val stop: () -> Unit,
+    val cancel: () -> Unit,
+)
+
+@Composable
+private fun rememberVoiceNoteRecorder(maxBytes: () -> Int, onRecorded: (VoiceNote) -> Unit): VoiceNoteController {
+    val context = LocalContext.current
+    val recorder = remember { VoiceRecorder(context.applicationContext) }
+    var recording by remember { mutableStateOf(false) }
+    var elapsed by remember { mutableStateOf(0L) }
+    val latestOnRecorded by rememberUpdatedState(onRecorded)
+    val latestMaxBytes by rememberUpdatedState(maxBytes)
+
+    fun stop() {
+        recording = false
+        recorder.stop()?.let(latestOnRecorded)
+    }
+    fun begin() {
+        if (recorder.start(latestMaxBytes()) { stop() }) recording = true
+        else Toast.makeText(context, "Couldn't use the microphone", Toast.LENGTH_SHORT).show()
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) begin() else Toast.makeText(context, "Allow the microphone to record voice messages", Toast.LENGTH_LONG).show()
+    }
+    LaunchedEffect(recording) {
+        while (recording) {
+            elapsed = recorder.elapsedMillis
+            kotlinx.coroutines.delay(200)
+        }
+    }
+    DisposableEffect(Unit) { onDispose { recorder.cancel() } }
+
+    return VoiceNoteController(
+        elapsedMillis = if (recording) elapsed else null,
+        start = {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin()
+            else permission.launch(Manifest.permission.RECORD_AUDIO)
+        },
+        stop = ::stop,
+        cancel = {
+            recording = false
+            recorder.cancel()
+        },
+    )
 }
 
 private fun <T : Any> LazyPagingItems<T>.peekOrNull(index: Int): T? =

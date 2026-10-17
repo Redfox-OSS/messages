@@ -39,6 +39,7 @@ include(":core:data")
 include(":core:database")
 include(":core:datastore")
 include(":core:telephony")
+include(":core:mms")
 include(":core:ui")
 
 include(":feature:onboarding")

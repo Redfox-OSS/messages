@@ -61,6 +61,25 @@
             android:name=".receiver.NotificationActionReceiver"
             android:exported="false" />
 
+        <!-- MMS: PDU files for the platform MMS service, and its download / send results. -->
+        <provider
+            android:name=".mms.MmsFileProvider"
+            android:authorities="${applicationId}.mmsfiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/mms_file_paths" />
+        </provider>
+
+        <receiver
+            android:name=".mms.MmsDownloadedReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".mms.MmsSentReceiver"
+            android:exported="false" />
+
         <!-- Sent / delivered callbacks for messages we hand to SmsManager. -->
         <receiver
             android:name=".send.SmsStatusReceiver"

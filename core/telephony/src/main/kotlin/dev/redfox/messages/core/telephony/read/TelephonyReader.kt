@@ -278,7 +278,7 @@ class TelephonyReader @Inject constructor(
     private fun readMms(threadId: Long, before: Position?, max: Int): List<Message> {
         data class Header(
             val id: Long, val box: MessageBox, val timestamp: Long, val read: Boolean,
-            val subId: Int, val subject: String?, val pending: Boolean,
+            val subId: Int, val subject: String?, val pending: Boolean, val downloadFailed: Boolean,
         )
         val headers = ArrayList<Header>()
         resolver.query(
@@ -291,20 +291,31 @@ class TelephonyReader @Inject constructor(
                 BaseMmsColumns.SUBSCRIPTION_ID,
                 BaseMmsColumns.SUBJECT,
                 BaseMmsColumns.MESSAGE_TYPE,
+                BaseMmsColumns.RESPONSE_STATUS,
+                BaseMmsColumns.STATUS,
             ),
             keyset("${BaseMmsColumns.THREAD_ID} = ?", BaseMmsColumns.DATE, Telephony.Mms._ID, before),
             keysetArgs(threadId, before),
             "${BaseMmsColumns.DATE} DESC, ${Telephony.Mms._ID} DESC",
         )?.use { c ->
             while (headers.size < max && c.moveToNext()) {
+                val rawBox = mmsBox(c.int(BaseMmsColumns.MESSAGE_BOX))
+                // MMS has no failed box: a failed send stays in the outbox with an error response status.
+                val responseStatus = c.intOrNull(BaseMmsColumns.RESPONSE_STATUS) ?: 0
+                val dateMillis = c.long(BaseMmsColumns.DATE) * 1000
+                // Samsung's provider can silently ignore our "failed" update, so an MMS that's still
+                // "sending" long after the MMS service's last retry (about 5 minutes) has failed.
+                val stale = rawBox == MessageBox.Outbox && System.currentTimeMillis() - dateMillis > STALE_MMS_SEND_MILLIS
+                val box = if (rawBox == MessageBox.Outbox && (responseStatus > RESPONSE_STATUS_OK || stale)) MessageBox.Failed else rawBox
                 headers += Header(
                     id = c.long(Telephony.Mms._ID),
-                    box = mmsBox(c.int(BaseMmsColumns.MESSAGE_BOX)),
+                    box = box,
                     timestamp = c.long(BaseMmsColumns.DATE) * 1000, // MMS dates are in seconds.
                     read = c.int(BaseMmsColumns.READ) == 1,
                     subId = c.int(BaseMmsColumns.SUBSCRIPTION_ID),
                     subject = c.string(BaseMmsColumns.SUBJECT)?.takeIf { it.isNotBlank() },
                     pending = c.int(BaseMmsColumns.MESSAGE_TYPE) == MESSAGE_TYPE_NOTIFICATION_IND,
+                    downloadFailed = c.intOrNull(BaseMmsColumns.STATUS) == STATUS_DEFERRED,
                 )
             }
         }
@@ -326,6 +337,7 @@ class TelephonyReader @Inject constructor(
                 attachments = content.attachments,
                 subject = h.subject,
                 isPendingDownload = h.pending,
+                isDownloadFailed = h.pending && h.downloadFailed,
                 rich = content.rich,
             )
         }
@@ -437,12 +449,18 @@ class TelephonyReader @Inject constructor(
         BaseMmsColumns.MESSAGE_BOX_SENT -> MessageBox.Sent
         BaseMmsColumns.MESSAGE_BOX_DRAFTS -> MessageBox.Draft
         BaseMmsColumns.MESSAGE_BOX_OUTBOX -> MessageBox.Outbox
+        BaseMmsColumns.MESSAGE_BOX_FAILED -> MessageBox.Failed
         else -> MessageBox.Inbox
     }
 
     private companion object {
         val MMS_PARTS: Uri = "content://mms/part".toUri()
         const val MESSAGE_TYPE_NOTIFICATION_IND = 130
+        /** X-Mms-Response-Status "Ok"; anything above is an error (OMA MMS ENC §7.3.48). */
+        const val RESPONSE_STATUS_OK = 0x80
+        const val STALE_MMS_SEND_MILLIS = 10 * 60_000L
+        /** X-Mms-Status "Deferred": we mark failed downloads this way. */
+        const val STATUS_DEFERRED = 0x83
         const val PDU_FROM = 137
         const val PDU_TO = 151
         const val PDU_CC = 130

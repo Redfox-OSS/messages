@@ -61,6 +61,8 @@ fun MessageBubble(
     isStarred: Boolean = false,
     /** Long-press: the message actions sheet (copy, star, delete). */
     onLongPress: (() -> Unit)? = null,
+    /** Retry a failed MMS download. */
+    onRetryDownload: (() -> Unit)? = null,
 ) {
     val colors = ObsidianTheme.colors
     val type = ObsidianTheme.typography
@@ -102,11 +104,7 @@ fun MessageBubble(
             }
             message.attachments.forEach { AttachmentView(it) }
             when {
-                message.isPendingDownload -> Text(
-                    "Multimedia message (not downloaded yet)",
-                    style = type.body,
-                    color = colors.textSecondary,
-                )
+                message.isPendingDownload -> PendingDownload(message.isDownloadFailed, onRetryDownload)
                 // No SelectionContainer: one per bubble is costly while flinging. Copy comes from the
                 // long-press message sheet (PLAN.md §8.4).
                 message.body.isNotEmpty() -> LinkifiedText(message.body, style = type.body, color = colors.textPrimary)
@@ -165,9 +163,36 @@ private fun statusCaption(message: Message, timeLabel: String?, canRetry: Boolea
     else -> timeLabel.orEmpty()
 }
 
+/** An MMS still on the carrier's server: downloading, or failed with a retry. */
+@Composable
+private fun PendingDownload(failed: Boolean, onRetry: (() -> Unit)?) {
+    val colors = ObsidianTheme.colors
+    Row(
+        if (failed && onRetry != null) Modifier.pressable(haptic = HapticFeedbackType.ContextClick, onClick = onRetry) else Modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ObSpacing.S),
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_download),
+            contentDescription = null,
+            tint = if (failed) colors.error else colors.textSecondary,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            if (failed) "Couldn't download · Tap to retry" else "Downloading multimedia message…",
+            style = ObsidianTheme.typography.body,
+            color = if (failed) colors.error else colors.textSecondary,
+        )
+    }
+}
+
 @Composable
 private fun AttachmentView(attachment: Attachment) {
     val colors = ObsidianTheme.colors
+    if (attachment.isAudio) {
+        AudioPlayerView(attachment.uri)
+        return
+    }
     if (attachment.isImage) {
         AsyncImage(
             model = attachment.uri,

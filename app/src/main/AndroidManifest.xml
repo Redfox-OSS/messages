@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Call button in conversations and the "Call" swipe: calls directly once allowed, else opens the dialler. -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- Voice messages (MMS); asked for the first time the mic is tapped. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:name=".MessagesApplication"

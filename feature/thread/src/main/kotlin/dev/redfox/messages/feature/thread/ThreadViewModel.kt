@@ -13,6 +13,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.redfox.messages.core.domain.SmsLength
 import dev.redfox.messages.core.domain.usecase.DeleteMessageUseCase
 import dev.redfox.messages.core.domain.usecase.GetSimsUseCase
+import dev.redfox.messages.core.domain.usecase.MaxMmsSizeUseCase
+import dev.redfox.messages.core.domain.usecase.RetryDownloadUseCase
 import dev.redfox.messages.core.domain.usecase.ManageScheduledUseCase
 import dev.redfox.messages.core.domain.usecase.ObserveScheduledUseCase
 import dev.redfox.messages.core.domain.usecase.ObserveStarredKeysUseCase
@@ -25,6 +27,7 @@ import dev.redfox.messages.core.domain.usecase.RetryMessageUseCase
 import dev.redfox.messages.core.domain.usecase.SendSmsUseCase
 import dev.redfox.messages.core.model.Contact
 import dev.redfox.messages.core.model.Message
+import dev.redfox.messages.core.model.OutgoingAttachment
 import dev.redfox.messages.core.model.RichSuggestion
 import dev.redfox.messages.core.model.ScheduledMessage
 import dev.redfox.messages.core.model.SimCard
@@ -65,25 +68,33 @@ data class ThreadState(
     /** A message waiting for "Delete?" confirmation. */
     val confirmDelete: Message? = null,
     val showSchedulePicker: Boolean = false,
+    /** Photos and voice notes waiting to go with the next message. */
+    val attachments: ImmutableList<OutgoingAttachment> = persistentListOf(),
+    /** The carrier's MMS size limit, to cap voice notes. */
+    val maxMmsBytes: Int = DEFAULT_MMS_BYTES,
 ) : UiState {
     /** One phone number: the header gets a call button. */
     val callableNumber: String? get() = recipients.singleOrNull()?.takeIf { acceptsReplies }
 
     val isGroup: Boolean get() = maxOf(participants.size, recipients.size) > 1
 
-    /** Group conversations are MMS, which can't be sent yet; everything else replies by SMS. */
-    val canReply: Boolean get() = recipients.size == 1 && acceptsReplies
+    /** Anyone with a phone number can be replied to; groups and media go as MMS. */
+    val canReply: Boolean get() = recipients.isNotEmpty() && acceptsReplies
+
+    /** What's sent will be an MMS (media, or a group) rather than an SMS. */
+    val sendsAsMms: Boolean get() = attachments.isNotEmpty() || recipients.size > 1
 
     /** Business senders ("VM-HDFCBK", RCS chatbots) are send-only; only phone numbers can be texted back. */
     val acceptsReplies: Boolean get() = recipients.all { address -> address.none { it.isLetter() } }
 
-    val canSend: Boolean get() = canReply && draft.isNotBlank() && !isSending
+    val canSend: Boolean get() = canReply && (draft.isNotBlank() || attachments.isNotEmpty()) && !isSending
 
     val showSimPicker: Boolean get() = sims.size > 1
 
     /** "12 / 2" (characters left / segments) once the message is long enough to care. */
     val counter: String?
         get() {
+            if (sendsAsMms) return null // MMS has no segments.
             val length = SmsLength.of(draft)
             return if (length.segments > 1 || length.remainingInSegment <= COUNTER_THRESHOLD) {
                 "${length.remainingInSegment} / ${length.segments}"
@@ -92,6 +103,7 @@ data class ThreadState(
 
     private companion object {
         const val COUNTER_THRESHOLD = 20
+        const val DEFAULT_MMS_BYTES = 300 * 1024
     }
 }
 
@@ -116,6 +128,9 @@ sealed interface ThreadIntent : UiIntent {
     data class CancelScheduled(val id: Long) : ThreadIntent
     data class SendScheduledNow(val id: Long) : ThreadIntent
     data object CallClicked : ThreadIntent
+    data class AddAttachments(val attachments: List<OutgoingAttachment>) : ThreadIntent
+    data class RemoveAttachment(val attachment: OutgoingAttachment) : ThreadIntent
+    data class RetryDownload(val message: Message) : ThreadIntent
 }
 
 sealed interface ThreadEffect : UiEffect {
@@ -125,6 +140,7 @@ sealed interface ThreadEffect : UiEffect {
     data object ScrollToNewest : ThreadEffect
     data class CopyText(val text: String) : ThreadEffect
     data class Call(val phoneNumber: String) : ThreadEffect
+    data class ShowError(val message: String) : ThreadEffect
 }
 
 /**
@@ -150,6 +166,8 @@ class ThreadViewModel @AssistedInject constructor(
     observeScheduled: ObserveScheduledUseCase,
     private val scheduleMessage: ScheduleMessageUseCase,
     private val manageScheduled: ManageScheduledUseCase,
+    private val retryDownload: RetryDownloadUseCase,
+    private val maxMmsSize: MaxMmsSizeUseCase,
 ) : MviViewModel<ThreadState, ThreadIntent, ThreadEffect>(
     ThreadState(
         title = title ?: addresses.joinToString(),
@@ -196,11 +214,14 @@ class ThreadViewModel @AssistedInject constructor(
         }
         viewModelScope.launch {
             val result = getSims()
+            val defaultSub = result.defaultSubscriptionId ?: result.sims.firstOrNull()?.subscriptionId ?: NO_SIM
+            val maxBytes = runCatching { maxMmsSize(defaultSub) }.getOrNull()
             reduce {
                 copy(
                     sims = result.sims.toImmutableList(),
                     selectedSim = result.sims.firstOrNull { it.subscriptionId == result.defaultSubscriptionId }
                         ?: result.sims.firstOrNull(),
+                    maxMmsBytes = maxBytes ?: maxMmsBytes,
                 )
             }
         }
@@ -240,7 +261,10 @@ class ThreadViewModel @AssistedInject constructor(
                 reduce { copy(confirmDelete = null) }
                 runCatching { deleteMessage(message) }
             }
-            ThreadIntent.ScheduleClicked -> if (state.value.canSend) reduce { copy(showSchedulePicker = true) }
+            // Scheduling is for text messages; media is sent straight away.
+            ThreadIntent.ScheduleClicked -> if (state.value.canSend && state.value.attachments.isEmpty()) {
+                reduce { copy(showSchedulePicker = true) }
+            }
             ThreadIntent.DismissSchedule -> reduce { copy(showSchedulePicker = false) }
             is ThreadIntent.ScheduleAt -> schedule(intent.sendAt)
             is ThreadIntent.CancelScheduled -> manageScheduled.cancel(intent.id)
@@ -249,6 +273,11 @@ class ThreadViewModel @AssistedInject constructor(
                 emit(ThreadEffect.ScrollToNewest)
             }
             ThreadIntent.CallClicked -> state.value.callableNumber?.let { emit(ThreadEffect.Call(it)) }
+            is ThreadIntent.AddAttachments -> reduce {
+                copy(attachments = (attachments + intent.attachments).distinctBy { it.uri }.take(MAX_ATTACHMENTS).toImmutableList())
+            }
+            is ThreadIntent.RemoveAttachment -> reduce { copy(attachments = (attachments - intent.attachment).toImmutableList()) }
+            is ThreadIntent.RetryDownload -> runCatching { retryDownload(intent.message) }
             // Same as tapping the link itself: Android opens it in the app that claims it, else the browser.
             is ThreadIntent.OpenBrandLink -> emit(ThreadEffect.OpenUrl(intent.link.url))
         }
@@ -258,12 +287,17 @@ class ThreadViewModel @AssistedInject constructor(
         val snapshot = state.value
         if (!snapshot.canSend) return
         // Clear first so a double tap can't send twice; restore the text if nothing was sent.
-        reduce { copy(draft = "", isSending = true) }
-        val sent = runCatching {
-            sendSms(snapshot.recipients, snapshot.draft, snapshot.selectedSim?.subscriptionId ?: NO_SIM)
-        }.getOrDefault(false)
-        reduce { copy(isSending = false, draft = if (sent) draft else snapshot.draft) }
+        reduce { copy(draft = "", attachments = persistentListOf(), isSending = true) }
+        val result = runCatching {
+            sendSms(snapshot.recipients, snapshot.draft, snapshot.selectedSim?.subscriptionId ?: NO_SIM, snapshot.attachments)
+        }
+        val sent = result.getOrDefault(false)
+        reduce {
+            if (sent) copy(isSending = false)
+            else copy(isSending = false, draft = snapshot.draft, attachments = snapshot.attachments)
+        }
         if (sent) emit(ThreadEffect.ScrollToNewest)
+        result.exceptionOrNull()?.let { emit(ThreadEffect.ShowError(it.message ?: "Couldn't send")) }
     }
 
     private suspend fun schedule(sendAt: Long) {
@@ -281,6 +315,8 @@ class ThreadViewModel @AssistedInject constructor(
     }
 
     private companion object {
+        const val MAX_ATTACHMENTS = 5
+
         /** Let the system pick its default SMS SIM. */
         const val NO_SIM = -1
     }

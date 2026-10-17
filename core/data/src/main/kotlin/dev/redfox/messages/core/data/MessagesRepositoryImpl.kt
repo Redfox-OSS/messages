@@ -30,6 +30,11 @@ import dev.redfox.messages.core.model.SyncStatus
 import dev.redfox.messages.core.telephony.IncomingMessageNotifier
 import dev.redfox.messages.core.telephony.SmsProviderWriter
 import dev.redfox.messages.core.telephony.send.SmsSender
+import dev.redfox.messages.core.telephony.mms.MmsMedia
+import dev.redfox.messages.core.telephony.mms.MmsTransport
+import dev.redfox.messages.core.model.OutgoingAttachment
+import android.content.ContentUris
+import android.provider.Telephony
 import dev.redfox.messages.core.telephony.read.MessagePageKey
 import dev.redfox.messages.core.telephony.read.ProviderChanges
 import dev.redfox.messages.core.telephony.read.TelephonyReader
@@ -58,6 +63,8 @@ internal class MessagesRepositoryImpl @Inject constructor(
     private val contacts: ContactResolver,
     private val changes: ProviderChanges,
     private val sender: SmsSender,
+    private val mms: MmsTransport,
+    private val media: MmsMedia,
     private val writer: SmsProviderWriter,
     private val notifier: IncomingMessageNotifier,
     @param:ApplicationScope private val appScope: CoroutineScope,
@@ -77,7 +84,41 @@ internal class MessagesRepositoryImpl @Inject constructor(
         addresses.forEach { sender.send(it, body, subscriptionId) }
     }
 
-    override suspend fun retry(message: Message) = withContext(io) { sender.retry(message.id) }
+    override suspend fun sendMms(
+        addresses: List<String>,
+        body: String,
+        attachments: List<OutgoingAttachment>,
+        subscriptionId: Int,
+    ) = withContext(io) {
+        try {
+            val threadId = writer.threadIdFor(addresses.toSet())
+            // Leave room for headers, SMIL and the text itself.
+            val maxSize = mms.maxMessageSize(subscriptionId)
+            val budget = (maxSize * MMS_BUDGET_SHARE).toInt() - body.toByteArray().size
+            Log.w(TAG, "Preparing MMS: ${attachments.map { it.mimeType }} to ${addresses.size} recipient(s), limit $maxSize B")
+            val parts = media.toParts(attachments, budget)
+            Log.w(TAG, "MMS parts ready: ${parts.map { "${it.contentType} ${it.data.size} B" }}")
+            mms.send(threadId, addresses, body.ifBlank { null }, parts, subscriptionId)
+        } catch (e: Exception) {
+            // Surfaces as the composer's error popup; the log has the cause.
+            Log.e(TAG, "Couldn't prepare MMS", e)
+            throw e
+        }
+        Unit
+    }
+
+    override suspend fun retry(message: Message) = withContext(io) {
+        when (message.kind) {
+            MessageKind.Sms -> sender.retry(message.id)
+            MessageKind.Mms -> mms.resend(ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, message.id))
+        }
+    }
+
+    override suspend fun retryDownload(message: Message) = withContext(io) {
+        mms.retryDownload(ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, message.id))
+    }
+
+    override suspend fun maxMmsSize(subscriptionId: Int): Int = withContext(io) { mms.maxMessageSize(subscriptionId) }
 
     override suspend fun markRead(threadId: Long) = withContext(io) {
         try {
@@ -187,6 +228,9 @@ internal class MessagesRepositoryImpl @Inject constructor(
 
         /** Radios report back within seconds; anything older that's still "sending" never will. */
         const val STALE_OUTBOX_MILLIS = 3 * 60_000L
+
+        /** Share of the carrier's MMS limit given to media; the rest covers headers, SMIL and text. */
+        const val MMS_BUDGET_SHARE = 0.9
 
         /** Rows are tiny; a generous prefetch keeps fast flings from ever reaching the end of loaded data. */
         val InboxPaging = PagingConfig(pageSize = 40, prefetchDistance = 20, initialLoadSize = 60, enablePlaceholders = false)

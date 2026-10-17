@@ -1,0 +1,9 @@
+The Java sources under src/main/java/dev/redfox/messages/core/mms/ (ContentType,
+MmsException, InvalidHeaderValueException and the pdu package) are the MMS PDU library from
+the Android Open Source Project, platform/frameworks/opt/mms at commit 4bfcd8501f09763c10255442c2b48fad0c796baa,
+licensed under the Apache License, Version 2.0 (see each file's header).
+
+Changes: moved from com.google.android.mms to dev.redfox.messages.core.mms so they never
+clash with the platform's hidden copy, and PduPersister was left out (the app stores MMS
+with its own code). Catch variables named `_` were renamed for modern Java. PduParser's read of the internal
+config_mms_content_disposition_support resource was replaced by its AOSP default (true).

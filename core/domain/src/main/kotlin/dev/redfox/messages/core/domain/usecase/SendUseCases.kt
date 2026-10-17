@@ -6,28 +6,54 @@ import dev.redfox.messages.core.domain.repository.SimRepository
 import dev.redfox.messages.core.model.Contact
 import dev.redfox.messages.core.model.Message
 import dev.redfox.messages.core.model.MessageBox
-import dev.redfox.messages.core.model.MessageKind
+import dev.redfox.messages.core.model.OutgoingAttachment
 import dev.redfox.messages.core.model.SimCard
 import javax.inject.Inject
 
+/**
+ * Sends what the composer holds. Plain text to one person goes as SMS; anything with media,
+ * or to several people (a group), goes as one MMS so everyone sees the same conversation.
+ */
 class SendSmsUseCase @Inject constructor(
     private val repository: MessagesRepository,
 ) {
-    /** Returns false (and sends nothing) for a blank message or no recipients. */
-    suspend operator fun invoke(addresses: List<String>, body: String, subscriptionId: Int): Boolean {
+    /** Returns false (and sends nothing) when there's nothing to send or no recipients. */
+    suspend operator fun invoke(
+        addresses: List<String>,
+        body: String,
+        subscriptionId: Int,
+        attachments: List<OutgoingAttachment> = emptyList(),
+    ): Boolean {
         val recipients = addresses.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        if (recipients.isEmpty() || body.isBlank()) return false
-        repository.sendSms(recipients, body.trimEnd(), subscriptionId)
+        if (recipients.isEmpty() || (body.isBlank() && attachments.isEmpty())) return false
+        if (attachments.isEmpty() && recipients.size == 1) {
+            repository.sendSms(recipients, body.trimEnd(), subscriptionId)
+        } else {
+            repository.sendMms(recipients, body.trim(), attachments, subscriptionId)
+        }
         return true
     }
+}
+
+class RetryDownloadUseCase @Inject constructor(
+    private val repository: MessagesRepository,
+) {
+    suspend operator fun invoke(message: Message) {
+        if (message.isPendingDownload) repository.retryDownload(message)
+    }
+}
+
+class MaxMmsSizeUseCase @Inject constructor(
+    private val repository: MessagesRepository,
+) {
+    suspend operator fun invoke(subscriptionId: Int): Int = repository.maxMmsSize(subscriptionId)
 }
 
 class RetryMessageUseCase @Inject constructor(
     private val repository: MessagesRepository,
 ) {
-    /** Only failed SMS can be retried; MMS sending isn't supported yet. */
     suspend operator fun invoke(message: Message) {
-        if (message.kind != MessageKind.Sms || message.box != MessageBox.Failed) return
+        if (message.box != MessageBox.Failed) return
         repository.retry(message)
     }
 }
