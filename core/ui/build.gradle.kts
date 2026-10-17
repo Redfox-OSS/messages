@@ -14,7 +14,8 @@ dependencies {
     api(libs.androidx.lifecycle.runtime.compose)
     api(libs.kotlinx.collections.immutable)
     api(project(":core:model"))
+    implementation(libs.androidx.paging.common)
     implementation(libs.coil.compose)
-    // Chatbot card images are remote (https); loaded only when the user opted into link previews.
+    // Chatbot card images are remote (https), always loaded.
     implementation(libs.coil.network.okhttp)
 }

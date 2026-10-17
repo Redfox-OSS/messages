@@ -13,10 +13,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -73,6 +77,7 @@ fun ThreadRoute(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val rows = viewModel.rows.collectAsLazyPagingItems()
     val listState = rememberLazyListState()
+    var scrollToSent by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
     CollectEffects(viewModel.effects) { effect ->
@@ -82,9 +87,11 @@ fun ThreadRoute(
                 // ACTION_DIAL only pre-fills the dialler: no call permission, the user confirms.
                 context.startActivity(Intent(Intent.ACTION_DIAL, "tel:${effect.phoneNumber}".toUri()))
             }
-            ThreadEffect.ScrollToNewest -> listState.animateScrollToItem(0)
+            // The sent message isn't in the list yet; FollowNewest scrolls once it lands.
+            ThreadEffect.ScrollToNewest -> scrollToSent = true
         }
     }
+    FollowNewest(rows, listState, scrollToSent = { scrollToSent }, onScrolled = { scrollToSent = false })
     ThreadScreen(
         state = state,
         rows = rows,
@@ -181,9 +188,43 @@ fun ThreadScreen(
                     modifier = composerModifier,
                 )
             } else if (state.recipients.isNotEmpty()) {
-                ComposerNotice("Group replies need MMS, which isn't supported yet", composerModifier)
+                ComposerNotice(
+                    if (!state.acceptsReplies) "This sender doesn't accept replies"
+                    else "Group replies need MMS, which isn't supported yet",
+                    composerModifier,
+                )
             }
         }
+    }
+}
+
+/**
+ * Keeps the newest message in view when one arrives. A new message is inserted *before* the
+ * first visible item, and LazyColumn holds that item still, so without this the new bubble
+ * lands just below the screen. Follows when the user just sent something, or was already at
+ * the bottom; someone reading older history isn't yanked down.
+ */
+@Composable
+private fun FollowNewest(
+    rows: LazyPagingItems<ThreadRow>,
+    listState: LazyListState,
+    scrollToSent: () -> Boolean,
+    onScrolled: () -> Unit,
+) {
+    val currentScrollToSent by rememberUpdatedState(scrollToSent)
+    val currentOnScrolled by rememberUpdatedState(onScrolled)
+    LaunchedEffect(rows, listState) {
+        var newest: String? = null
+        snapshotFlow { if (rows.itemCount > 0) rows.peek(0)?.key else null }
+            .collect { key ->
+                val arrived = key != null && key != newest
+                val atBottom = listState.firstVisibleItemIndex <= 1
+                if (arrived && (currentScrollToSent() || (newest != null && atBottom))) {
+                    listState.animateScrollToItem(0)
+                    currentOnScrolled()
+                }
+                newest = key
+            }
     }
 }
 

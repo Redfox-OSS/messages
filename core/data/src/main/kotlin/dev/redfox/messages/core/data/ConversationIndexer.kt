@@ -76,7 +76,7 @@ internal class ConversationIndexer @Inject constructor(
             ConversationEntity(
                 threadId = t.threadId,
                 participants = ParticipantCodec.encode(participants),
-                snippet = t.snippet,
+                snippet = t.snippet.toSnippet(),
                 timestamp = t.timestamp,
                 unreadCount = t.unreadCount,
                 messageCount = t.messageCount,
@@ -90,6 +90,22 @@ internal class ConversationIndexer @Inject constructor(
         const val TAG = "ConversationIndexer"
     }
 }
+
+/**
+ * The inbox shows one line of the latest message, so store only the start of it, on one line.
+ * Laying out (and shaping, for Bengali or Hindi) a whole long SMS per row while scrolling
+ * just to ellipsize it was the inbox's biggest per-row cost.
+ */
+internal fun String.toSnippet(): String {
+    val oneLine = if (length > SNIPPET_SCAN) substring(0, SNIPPET_SCAN) else this
+    val cut = oneLine.replace(Whitespace, " ").trim().take(SNIPPET_MAX)
+    // Never end on half an emoji.
+    return if (cut.isNotEmpty() && cut.last().isHighSurrogate()) cut.dropLast(1) else cut
+}
+
+private val Whitespace = Regex("""\s+""")
+private const val SNIPPET_MAX = 120
+private const val SNIPPET_SCAN = 400
 
 /** Compares phone numbers by their last 10 digits; alphanumeric senders by case-folded text. */
 internal fun String.matchKey(): String {

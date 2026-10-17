@@ -2,7 +2,7 @@ package dev.redfox.messages.feature.conversations
 
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
-import androidx.paging.cachedIn
+import dev.redfox.messages.core.ui.mvi.cachedOffMain
 import androidx.paging.map
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.redfox.messages.core.domain.usecase.GetDeviceSetupStatusUseCase
@@ -41,7 +41,7 @@ class ConversationsViewModel @Inject constructor(
             val now = System.currentTimeMillis()
             page.map { ConversationItem(it, timeFormat.conversationTime(it.timestamp, now)) }
         }
-        .cachedIn(viewModelScope)
+        .cachedOffMain(this)
 
     init {
         filter.bind { copy(filter = it) }

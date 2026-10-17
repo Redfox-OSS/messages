@@ -3,7 +3,7 @@ package dev.redfox.messages.feature.thread
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
-import androidx.paging.cachedIn
+import dev.redfox.messages.core.ui.mvi.cachedOffMain
 import androidx.paging.insertSeparators
 import androidx.paging.map
 import dagger.assisted.Assisted
@@ -48,7 +48,10 @@ data class ThreadState(
     val isGroup: Boolean get() = maxOf(participants.size, recipients.size) > 1
 
     /** Group conversations are MMS, which can't be sent yet; everything else replies by SMS. */
-    val canReply: Boolean get() = recipients.size == 1
+    val canReply: Boolean get() = recipients.size == 1 && acceptsReplies
+
+    /** Business senders ("VM-HDFCBK", RCS chatbots) are send-only; only phone numbers can be texted back. */
+    val acceptsReplies: Boolean get() = recipients.all { address -> address.none { it.isLetter() } }
 
     val canSend: Boolean get() = canReply && draft.isNotBlank() && !isSending
 
@@ -128,7 +131,7 @@ class ThreadViewModel @AssistedInject constructor(
                     daySeparator((newer as? ThreadRow.Msg)?.message, (older as? ThreadRow.Msg)?.message, timeFormat, now)
                 }
         }
-        .cachedIn(viewModelScope)
+        .cachedOffMain(this)
 
     init {
         viewModelScope.launch { markRead(threadId) }

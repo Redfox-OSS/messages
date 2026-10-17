@@ -92,7 +92,8 @@ class IncomingMessageNotifier @Inject constructor(
                 OtpCopyReceiver.pendingIntent(context, otp, dismissId = null),
             )
         }
-        builder.addAction(replyAction(id, sms))
+        // Business senders ("VM-HDFCBK") can't be texted back.
+        if (sms.address.none { it.isLetter() }) builder.addAction(replyAction(id, sms))
         if (sms.threadId > 0) {
             builder.addAction(
                 R.drawable.ic_stat_done,

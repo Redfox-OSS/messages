@@ -43,6 +43,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Both target phones (S23, OnePlus 13) are 64-bit ARM; skip the other CPUs' native libs.
+            ndk { abiFilters += "arm64-v8a" }
             // The release key when keystore.properties exists; otherwise the debug key, so a
             // release APK can still be built and sideloaded.
             signingConfig = signingConfigs.getByName(if (hasReleaseKey) "release" else "debug")
@@ -50,6 +52,25 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    // The app is English-only; drop the 80+ translations bundled by AndroidX libraries.
+    androidResources {
+        localeFilters += "en"
+    }
+    packaging {
+        resources {
+            excludes += listOf(
+                // Library licence texts and version markers: not used at runtime.
+                "META-INF/androidx/**",
+                "META-INF/*.version",
+                "META-INF/**/LICENSE*",
+                "META-INF/**/NOTICE*",
+                // Only kotlin-reflect reads these; the app doesn't use reflection.
+                "kotlin/**.kotlin_builtins",
+                // kotlinx-coroutines debug-agent probes.
+                "DebugProbesKt.bin",
+            )
+        }
     }
 }
 
