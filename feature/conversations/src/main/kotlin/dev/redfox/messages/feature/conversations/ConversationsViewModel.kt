@@ -16,6 +16,9 @@ import dev.redfox.messages.core.domain.usecase.PagedConversationsUseCase
 import dev.redfox.messages.core.domain.usecase.StartInboxSyncUseCase
 import dev.redfox.messages.core.ui.format.TimeFormat
 import dev.redfox.messages.core.ui.mvi.MviViewModel
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,18 +62,50 @@ class ConversationsViewModel @Inject constructor(
     override suspend fun handle(intent: ConversationsIntent) {
         when (intent) {
             ConversationsIntent.Refresh -> checkAccess()
-            is ConversationsIntent.FilterSelected -> filter.value = intent.filter
-            is ConversationsIntent.ConversationClicked -> emit(ConversationsEffect.OpenThread(intent.threadId))
+            is ConversationsIntent.FilterSelected -> {
+                // A selection only makes sense in the list it was made in.
+                reduce { copy(selected = persistentMapOf()) }
+                filter.value = intent.filter
+            }
+            is ConversationsIntent.ConversationClicked ->
+                if (state.value.isSelecting) reduce { copy(selected = selected.toggled(intent.conversation)) }
+                else emit(ConversationsEffect.OpenThread(intent.conversation.threadId))
+            is ConversationsIntent.ConversationLongPressed ->
+                reduce { copy(selected = selected.toggled(intent.conversation)) }
+            ConversationsIntent.ClearSelection -> reduce { copy(selected = persistentMapOf()) }
+            ConversationsIntent.ToggleReadSelected -> {
+                val snapshot = state.value
+                val markRead = snapshot.selectionMarksRead
+                reduce { copy(selected = persistentMapOf()) }
+                snapshot.selected.values.forEach { conversation ->
+                    runCatching {
+                        when {
+                            markRead && conversation.isUnread -> conversationActions.markRead(conversation)
+                            !markRead -> conversationActions.toggleRead(conversation)
+                        }
+                    }
+                }
+            }
+            ConversationsIntent.ArchiveSelected -> {
+                val snapshot = state.value
+                val archive = !snapshot.selectionUnarchives
+                reduce { copy(selected = persistentMapOf()) }
+                snapshot.selected.values
+                    .filter { it.isArchived != archive }
+                    .forEach { runCatching { conversationActions.setArchived(it, archive) } }
+            }
+            ConversationsIntent.DeleteSelected ->
+                reduce { copy(confirmDelete = selected.values.toImmutableList()) }
             ConversationsIntent.GrantAccessClicked -> emit(ConversationsEffect.RequestSmsAccess)
             is ConversationsIntent.Swiped -> {
                 val snapshot = state.value
                 swiped(intent.conversation, if (intent.left) snapshot.swipeLeft else snapshot.swipeRight)
             }
-            ConversationsIntent.CancelDelete -> reduce { copy(confirmDelete = null) }
+            ConversationsIntent.CancelDelete -> reduce { copy(confirmDelete = persistentListOf()) }
             ConversationsIntent.ConfirmDelete -> {
-                val conversation = state.value.confirmDelete ?: return
-                reduce { copy(confirmDelete = null) }
-                runCatching { conversationActions.delete(conversation) }
+                val conversations = state.value.confirmDelete
+                reduce { copy(confirmDelete = persistentListOf(), selected = persistentMapOf()) }
+                conversations.forEach { runCatching { conversationActions.delete(it) } }
             }
         }
     }
@@ -80,7 +115,7 @@ class ConversationsViewModel @Inject constructor(
             when (action) {
                 SwipeAction.None -> Unit
                 SwipeAction.Archive -> conversationActions.toggleArchived(conversation)
-                SwipeAction.Delete -> reduce { copy(confirmDelete = conversation) }
+                SwipeAction.Delete -> reduce { copy(confirmDelete = persistentListOf(conversation)) }
                 SwipeAction.ToggleRead -> conversationActions.toggleRead(conversation)
                 SwipeAction.Pin -> conversationActions.togglePinned(conversation)
                 SwipeAction.Call -> callableNumber(conversation)?.let { emit(ConversationsEffect.Call(it)) }

@@ -64,6 +64,9 @@ class ConversationActionsUseCase @Inject constructor(private val messages: Messa
     suspend fun toggleArchived(conversation: Conversation) =
         messages.setArchived(conversation.threadId, !conversation.isArchived)
     suspend fun toggleRead(conversation: Conversation) = messages.toggleRead(conversation.threadId)
+    suspend fun markRead(conversation: Conversation) = messages.markRead(conversation.threadId)
+    suspend fun setArchived(conversation: Conversation, archived: Boolean) =
+        messages.setArchived(conversation.threadId, archived)
     suspend fun delete(conversation: Conversation) = messages.deleteThread(conversation.threadId)
 }
 

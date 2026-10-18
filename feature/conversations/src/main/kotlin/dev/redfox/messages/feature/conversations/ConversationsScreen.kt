@@ -1,6 +1,7 @@
 package dev.redfox.messages.feature.conversations
 
 import android.Manifest
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
@@ -110,9 +111,13 @@ fun ConversationsScreen(
     onIntent: (ConversationsIntent) -> Unit,
 ) {
     val settled = conversations.loadState.refresh is LoadState.NotLoading && !state.isIndexing
+    BackHandler(enabled = state.isSelecting) { onIntent(ConversationsIntent.ClearSelection) }
     TabPage(
-        title = "Messages",
-        actions = { HeaderIconButton(R.drawable.ic_settings, contentDescription = "Settings", onClick = onOpenSettings) },
+        title = if (state.isSelecting) "${state.selected.size} selected" else "Messages",
+        actions = {
+            if (state.isSelecting) SelectionActions(state, onIntent)
+            else HeaderIconButton(R.drawable.ic_settings, contentDescription = "Settings", onClick = onOpenSettings)
+        },
     ) { padding ->
         when {
             !state.hasSmsAccess -> AccessPrompt(padding, onIntent)
@@ -153,8 +158,9 @@ fun ConversationsScreen(
                     val item = conversations[index] ?: return@items
                     val conversation = item.conversation
                     SwipeActionRow(
-                        left = swipeVisual(state.swipeLeft, conversation),
-                        right = swipeVisual(state.swipeRight, conversation),
+                        // No swipes while selecting: a drag there is almost always a stray one.
+                        left = if (state.isSelecting) null else swipeVisual(state.swipeLeft, conversation),
+                        right = if (state.isSelecting) null else swipeVisual(state.swipeRight, conversation),
                         onSwipeLeft = { onIntent(ConversationsIntent.Swiped(conversation, left = true)) },
                         onSwipeRight = { onIntent(ConversationsIntent.Swiped(conversation, left = false)) },
                         modifier = Modifier
@@ -165,7 +171,9 @@ fun ConversationsScreen(
                         ConversationRow(
                             conversation = conversation,
                             timeLabel = item.timeLabel,
-                            onClick = { onIntent(ConversationsIntent.ConversationClicked(conversation.threadId)) },
+                            onClick = { onIntent(ConversationsIntent.ConversationClicked(conversation)) },
+                            onLongClick = { onIntent(ConversationsIntent.ConversationLongPressed(conversation)) },
+                            selected = conversation.threadId in state.selected,
                             // Opaque, so the swipe's colour only shows where the row has moved away.
                             modifier = Modifier.background(ObsidianTheme.colors.background),
                         )
@@ -173,10 +181,12 @@ fun ConversationsScreen(
                 }
             }
         }
-        state.confirmDelete?.let { conversation ->
+        if (state.confirmDelete.isNotEmpty()) {
+            val single = state.confirmDelete.singleOrNull()
             ObAlertDialog(
-                title = "Delete conversation?",
-                text = "All messages with ${conversation.title} are removed from this phone for good.",
+                title = if (single != null) "Delete conversation?" else "Delete ${state.confirmDelete.size} conversations?",
+                text = if (single != null) "All messages with ${single.title} are removed from this phone for good."
+                else "All their messages are removed from this phone for good.",
                 confirmLabel = "Delete",
                 destructive = true,
                 onConfirm = { onIntent(ConversationsIntent.ConfirmDelete) },
@@ -184,6 +194,31 @@ fun ConversationsScreen(
             )
         }
     }
+}
+
+/** The header's bulk actions while selecting. Labels follow the selection, like the swipes do. */
+@Composable
+private fun SelectionActions(state: ConversationsState, onIntent: (ConversationsIntent) -> Unit) {
+    HeaderIconButton(
+        if (state.selectionMarksRead) R.drawable.ic_mark_chat_read else R.drawable.ic_mark_chat_unread,
+        contentDescription = if (state.selectionMarksRead) "Mark read" else "Mark unread",
+        onClick = { onIntent(ConversationsIntent.ToggleReadSelected) },
+    )
+    HeaderIconButton(
+        if (state.selectionUnarchives) R.drawable.ic_unarchive else R.drawable.ic_archive,
+        contentDescription = if (state.selectionUnarchives) "Unarchive" else "Archive",
+        onClick = { onIntent(ConversationsIntent.ArchiveSelected) },
+    )
+    HeaderIconButton(
+        R.drawable.ic_delete,
+        contentDescription = "Delete",
+        onClick = { onIntent(ConversationsIntent.DeleteSelected) },
+    )
+    HeaderIconButton(
+        R.drawable.ic_close,
+        contentDescription = "Cancel selection",
+        onClick = { onIntent(ConversationsIntent.ClearSelection) },
+    )
 }
 
 /** What a swipe reveals for this conversation; null when the action doesn't apply (e.g. calling a bank). */
