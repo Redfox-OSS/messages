@@ -23,13 +23,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import dev.redfox.messages.core.model.MediaHeight
 import dev.redfox.messages.core.model.RichCard
 import dev.redfox.messages.core.model.RichContent
@@ -141,16 +139,12 @@ private fun MediaView(media: RichMedia) {
         Modifier.fillMaxWidth().then(sized).background(colors.tile),
         contentAlignment = Alignment.Center,
     ) {
-        // Shows on the tile while the image loads, and stays if it can't (offline, expired link).
-        Icon(painterResource(R.drawable.ic_image), null, tint = colors.textTertiary)
-        AsyncImage(
-            model = if (media.isVideo) media.thumbnailUrl ?: media.url else media.url,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.matchParentSize(),
-        )
+        // The image or video lives on the business's server, and the app has no internet access
+        // (nothing leaves the device, and nothing is fetched): the tile marks where it would be.
         if (media.isVideo) {
-            Icon(painterResource(R.drawable.ic_play_circle), null, tint = colors.textPrimary, modifier = Modifier.size(44.dp))
+            Icon(painterResource(R.drawable.ic_play_circle), null, tint = colors.textTertiary, modifier = Modifier.size(44.dp))
+        } else {
+            Icon(painterResource(R.drawable.ic_image), null, tint = colors.textTertiary)
         }
     }
 }

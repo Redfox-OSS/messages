@@ -17,7 +17,6 @@ dependencies {
     implementation(libs.androidx.paging.common)
     // rememberCaller(): the call-permission request.
     implementation(libs.androidx.activity.compose)
+    // Local images only (photos, contact pictures, MMS parts): no network module, no internet access.
     implementation(libs.coil.compose)
-    // Chatbot card images are remote (https), always loaded.
-    implementation(libs.coil.network.okhttp)
 }
