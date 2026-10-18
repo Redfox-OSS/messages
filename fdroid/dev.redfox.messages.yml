@@ -1,0 +1,38 @@
+Categories:
+  - Messaging
+  - Phone & SMS
+License: Apache-2.0
+AuthorName: Redfox OSS
+WebSite: https://github.com/Redfox-OSS
+SourceCode: https://github.com/Redfox-OSS/messages
+IssueTracker: https://github.com/Redfox-OSS/messages/issues
+Changelog: https://github.com/Redfox-OSS/messages/releases
+
+AutoName: Messages
+
+RepoType: git
+Repo: https://github.com/Redfox-OSS/messages.git
+Binaries: https://github.com/Redfox-OSS/messages/releases/download/v%v/Messages-%v.apk
+
+Builds:
+  - versionName: 1.0.0
+    versionCode: 4
+    commit: v1.0.0
+    subdir: app
+    submodules: true
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-21-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - yes
+    prebuild: sed -i -e '/redfox-oss.github.io/d' ../settings.gradle.kts
+    gradleprops:
+      - obsidian.fromSource=true
+
+AllowedAPKSigningKeys: 8fcd2ca3fc50d0029ecf503b5de273a55b00ea8098476b136e998e59b6506193
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+$
+CurrentVersion: 1.0.0
+CurrentVersionCode: 4

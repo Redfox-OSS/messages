@@ -1,0 +1,24 @@
+Messages is a free, open-source SMS and MMS app that replaces your phone's default messaging app. It's part of Redfox OSS and built on the Obsidian design system: always dark, one vivid accent, soft glows, frosted glass and springy motion.
+
+<b>Private by design</b>
+Messages has no internet permission, so it can't send your messages, contacts or anything else off your phone. MMS still works, because Android's own MMS service handles the network side. No analytics, no ads, no crash reporting.
+
+<b>Features</b>
+<ul>
+<li><b>Your existing texts</b> load straight from Android's message store, so nothing is lost when you switch apps in either direction.</li>
+<li><b>Delivery status</b>: Sending, Sent, Delivered, or "Not sent · Tap to retry".</li>
+<li><b>Fast search</b> on the device: words by how they start, numbers anywhere in a message.</li>
+<li><b>MMS photos, group texts and voice notes.</b> Photos are shrunk to fit your carrier's limit.</li>
+<li><b>One-time codes</b>: a live notification shows the code with tap-to-copy, and a Copy button sits under the message. Codes are copied as sensitive.</li>
+<li><b>Starred and scheduled messages</b>, kept in the Saved tab. Scheduled messages survive reboots.</li>
+<li><b>Pin and archive</b> conversations, or long-press to select several and mark them read or unread, archive or delete them at once.</li>
+<li><b>Swipes your way</b>: Archive, Delete, Read/unread, Pin, Call or nothing, for each direction.</li>
+<li><b>Reply from the notification</b>, or mark as read.</li>
+<li><b>Dual SIM</b> support, and a counter for how many SMS parts a long message takes.</li>
+<li><b>Your accent colour</b>, picked in Settings.</li>
+</ul>
+
+<b>Limitations</b>
+Android doesn't let third-party apps use RCS, so Messages is SMS and MMS only. If RCS is on for your number, turn it off to get people's messages as SMS and MMS.
+
+Requires Android 13 or newer. Set Messages as the default SMS app when it asks on first launch.

@@ -1,0 +1,3 @@
+[submodule "external/obsidian"]
+	path = external/obsidian
+	url = https://github.com/Redfox-OSS/obsidian.git

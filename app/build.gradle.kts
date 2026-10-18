@@ -19,8 +19,9 @@ android {
 
     defaultConfig {
         applicationId = "dev.redfox.messages"
-        versionCode = 3
-        versionName = "0.1.2"
+        // Static literals: F-Droid reads them from this file to detect new releases.
+        versionCode = 4
+        versionName = "1.0.0"
     }
 
     signingConfigs {
@@ -43,11 +44,10 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Both target phones (S23, OnePlus 13) are 64-bit ARM; skip the other CPUs' native libs.
-            ndk { abiFilters += "arm64-v8a" }
-            // The release key when keystore.properties exists; otherwise the debug key, so a
-            // release APK can still be built and sideloaded.
-            signingConfig = signingConfigs.getByName(if (hasReleaseKey) "release" else "debug")
+            // Signed with the release key when keystore.properties exists; otherwise left unsigned,
+            // which is what F-Droid's build server expects (it then checks the result against the
+            // signed APK on the GitHub release; see fdroid/README.md).
+            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
         }
     }
     buildFeatures {
@@ -56,6 +56,11 @@ android {
     // The app is English-only; drop the 80+ translations bundled by AndroidX libraries.
     androidResources {
         localeFilters += "en"
+    }
+    // No Google-encrypted dependency report in the APK: F-Droid can't read it, and the source is public.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
     packaging {
         resources {

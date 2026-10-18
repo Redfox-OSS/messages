@@ -1,0 +1,8 @@
+First open-source release.
+
+• Conversations, search, MMS photos, group texts and voice notes
+• One-time code notification with tap-to-copy
+• Starred and scheduled messages, pin and archive
+• Long-press to select conversations: read/unread, archive or delete several at once
+• Configurable inbox swipes and notification replies
+• No internet permission
