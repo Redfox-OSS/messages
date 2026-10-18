@@ -25,7 +25,7 @@ A personal, **SMS + MMS only** (no RCS) Android messaging app that fully replace
 | Kotlin | **2.2.10** (KSP `2.2.10-2.0.2`) |
 | AGP | 9.2.1 |
 | Compose | **BOM 2026.02.01** (Compose 1.10) |
-| Design system | **`dev.redfox:obsidian:1.0.0`** from `mavenLocal()` (already published to `~/.m2`). Brings M3 + **Haze 1.7.2** as `api` — do **not** upgrade Haze to 2.x (needs Compose 1.12 / Kotlin 2.4) |
+| Design system | **`dev.redfox:obsidian:2.0.0`** from the Redfox-OSS Maven repository (`https://redfox-oss.github.io/obsidian/maven`, source at github.com/Redfox-OSS/obsidian). Brings M3 + **Haze 1.7.2** as `api` — do **not** upgrade Haze to 2.x (needs Compose 1.12 / Kotlin 2.4) |
 | SDK | **minSdk 33** (≥ 31 required by Obsidian), target/compile 36 |
 | DI | Hilt 2.59.2 |
 | Async | Coroutines + Flow |
@@ -42,10 +42,13 @@ A personal, **SMS + MMS only** (no RCS) Android messaging app that fully replace
 ```kotlin
 // settings.gradle.kts
 dependencyResolutionManagement {
-    repositories { google(); mavenCentral(); mavenLocal() }
+    repositories {
+        google(); mavenCentral()
+        maven("https://redfox-oss.github.io/obsidian/maven") { content { includeGroup("dev.redfox") } }
+    }
 }
 // core/ui/build.gradle.kts
-dependencies { api("dev.redfox:obsidian:1.0.0") }   // via version catalog alias `obsidian`
+dependencies { api("dev.redfox:obsidian:2.0.0") }   // via version catalog alias `obsidian`
 ```
 
 ---
@@ -218,7 +221,7 @@ Obsidian ships no text input, bubble, avatar, badge, sheet, snackbar or swipe ro
 | `MediaThumb` | `ObShapes.Small`, `tile` placeholder; video and audio glyph overlays |
 | `ContactChip` | Recipient chip in New conversation (`accentContainerStrong` + `accentBorder`), `popOnSelect` on add |
 
-All of these get Roborazzi screenshot tests and are added to an in-app **Debug → Design showcase** screen that hosts `ObsidianShowcase()` plus the messaging components, for quick visual checks.
+The general-purpose ones (sheet, pages, swipe row, badge, progress bar, copy pill, avatar, compact nav bar) now live in Obsidian itself; `:core:ui` keeps only what is specific to messaging. Obsidian's catalog app (github.com/Redfox-OSS/obsidian) is the visual reference for all of them.
 
 ---
 
@@ -305,7 +308,7 @@ Pushed destinations use `DetailHeader`. Popping back passes `RevealScope(enabled
 - **Organisation:** swipe actions, auto-categorise, OTP auto-delete after 24h, auto-rules (E4)
 - **Privacy & security:** blocked numbers and rules, spam folder, locked conversations (E2)
 - **Data:** backup and restore (E7), bulk cleanup (E14), storage used
-- **About:** version, licences (Inter OFL), and Design showcase (debug builds)
+- **About:** version, licences (Inter OFL)
 
 ### 8.10 Secondary screens
 Blocked & rules, Archive, Spam, Backup, and Locked vault all use `DetailHeader` + MVVM. Blocking rule types (Number / Prefix / Keyword / Regex) use `SegmentedPill`. The Backup screen shows a `PrimaryButton("Back up now")` and progress through `RollingText`.

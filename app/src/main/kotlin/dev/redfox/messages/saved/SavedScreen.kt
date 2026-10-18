@@ -13,7 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
-import dev.redfox.messages.core.ui.components.TabPage
+import dev.redfox.obsidian.components.TabPage
 import dev.redfox.messages.feature.scheduled.ScheduledPage
 import dev.redfox.messages.feature.starred.StarredPage
 import dev.redfox.obsidian.components.SegmentOption

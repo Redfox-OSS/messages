@@ -20,11 +20,9 @@ data class SettingsState(
 sealed interface SettingsIntent : UiIntent {
     data object Refresh : SettingsIntent
     data class AccentSelected(val accent: AppAccent) : SettingsIntent
-    data object DesignShowcaseClicked : SettingsIntent
     data class SwipeActionSelected(val left: Boolean, val action: SwipeAction) : SettingsIntent
     data class VibrationSelected(val pattern: VibrationPattern) : SettingsIntent
 }
 
-sealed interface SettingsEffect : UiEffect {
-    data object OpenDesignShowcase : SettingsEffect
-}
+/** Settings has no one-off effects; everything it shows is state. */
+sealed interface SettingsEffect : UiEffect

@@ -11,10 +11,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import dev.redfox.messages.core.model.DeliveryStatus
-import dev.redfox.messages.core.ui.format.BrandLink
-import dev.redfox.obsidian.effects.pressable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -22,14 +18,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.redfox.messages.core.model.Attachment
+import dev.redfox.messages.core.model.DeliveryStatus
 import dev.redfox.messages.core.model.Message
 import dev.redfox.messages.core.model.MessageBox
 import dev.redfox.messages.core.ui.R
+import dev.redfox.messages.core.ui.format.BrandLink
+import dev.redfox.obsidian.components.CopyPill
+import dev.redfox.obsidian.effects.pressable
 import dev.redfox.obsidian.theme.ObShapes
 import dev.redfox.obsidian.theme.ObSpacing
 import dev.redfox.obsidian.theme.ObsidianTheme
@@ -114,7 +115,7 @@ fun MessageBubble(
             }
         }
         if (otp != null) {
-            OtpCopyButton(code = otp, onCopy = onCopyOtp, modifier = Modifier.padding(top = ObSpacing.XS))
+            CopyPill(value = otp, onCopy = onCopyOtp, modifier = Modifier.padding(top = ObSpacing.XS))
         }
         if (brandLinks.isNotEmpty()) {
             BrandLinkButtons(
@@ -240,17 +241,5 @@ private fun bubbleShape(outgoing: Boolean, position: BubblePosition): RoundedCor
         RoundedCornerShape(Round, if (top) Tight else Round, if (bottom) Tight else Round, Round)
     } else {
         RoundedCornerShape(if (top) Tight else Round, Round, Round, if (bottom) Tight else Round)
-    }
-}
-
-/** Centred day separator ("TODAY", "MON, 13 OCT"). */
-@Composable
-fun DateDivider(label: String, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxWidth().padding(vertical = ObSpacing.M), contentAlignment = Alignment.Center) {
-        Text(
-            label.uppercase(),
-            style = ObsidianTheme.typography.caption,
-            color = ObsidianTheme.colors.textTertiary,
-        )
     }
 }

@@ -7,19 +7,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import dev.redfox.messages.core.ui.R
-import androidx.compose.foundation.layout.size
-import androidx.compose.ui.res.painterResource
-import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.redfox.messages.core.model.Conversation
+import dev.redfox.messages.core.ui.R
+import dev.redfox.obsidian.components.CountBadge
 import dev.redfox.obsidian.effects.pressable
 import dev.redfox.obsidian.theme.ObSpacing
 import dev.redfox.obsidian.theme.ObsidianTheme
@@ -85,7 +86,7 @@ fun ConversationRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (unread) UnreadBadge(conversation.unreadCount)
+                if (unread) CountBadge(conversation.unreadCount)
             }
         }
     }

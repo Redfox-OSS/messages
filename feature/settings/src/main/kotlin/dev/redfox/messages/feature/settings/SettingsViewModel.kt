@@ -29,7 +29,6 @@ class SettingsViewModel @Inject constructor(
         when (intent) {
             SettingsIntent.Refresh -> reduce { copy(isDefaultSmsApp = getDeviceSetupStatus().isDefaultSmsApp) }
             is SettingsIntent.AccentSelected -> setAccent(intent.accent)
-            SettingsIntent.DesignShowcaseClicked -> emit(SettingsEffect.OpenDesignShowcase)
             is SettingsIntent.SwipeActionSelected -> setSwipeAction(intent.left, intent.action)
             is SettingsIntent.VibrationSelected -> setVibration(intent.pattern)
         }

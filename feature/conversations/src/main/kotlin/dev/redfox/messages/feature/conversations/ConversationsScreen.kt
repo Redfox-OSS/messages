@@ -36,13 +36,13 @@ import androidx.compose.foundation.background
 import dev.redfox.messages.core.model.Conversation
 import dev.redfox.messages.core.model.SwipeAction
 import dev.redfox.messages.core.ui.components.ConversationRow
-import dev.redfox.messages.core.ui.components.SwipeActionRow
-import dev.redfox.messages.core.ui.components.SyncProgressBar
-import dev.redfox.messages.core.ui.components.SwipeVisual
+import dev.redfox.obsidian.components.SwipeActionRow
+import dev.redfox.obsidian.components.ObProgressBar
+import dev.redfox.obsidian.components.SwipeVisual
 import dev.redfox.messages.core.ui.platform.rememberCaller
 import dev.redfox.obsidian.components.ObAlertDialog
 import dev.redfox.obsidian.theme.ObsidianTheme
-import dev.redfox.messages.core.ui.components.TabPage
+import dev.redfox.obsidian.components.TabPage
 import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.obsidian.components.ChoicePill
 import dev.redfox.obsidian.components.EmptyState
@@ -126,9 +126,10 @@ fun ConversationsScreen(
                 // In the list, under the filters: it can't overlap them, and since it only shows
                 // while the inbox is still empty (the first sync), nothing below it moves.
                 item(key = "sync", contentType = "sync") {
-                    SyncProgressBar(
+                    ObProgressBar(
                         visible = state.isIndexing && conversations.itemCount == 0,
                         progress = state.syncProgress,
+                        label = "Syncing messages",
                         modifier = Modifier.padding(top = ObSpacing.S),
                     )
                 }

@@ -1,6 +1,8 @@
 package dev.redfox.messages.feature.settings
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,16 +11,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.annotation.DrawableRes
-import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import dev.redfox.messages.core.model.SwipeAction
-import dev.redfox.messages.core.model.VibrationPattern
-import dev.redfox.obsidian.components.ObDropdownMenu
-import dev.redfox.obsidian.components.ObMenuItem
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -26,13 +22,18 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavKey
+import dev.redfox.messages.core.model.SwipeAction
+import dev.redfox.messages.core.model.VibrationPattern
 import dev.redfox.messages.core.ui.R
-import dev.redfox.messages.core.ui.components.AccentSwatchRow
-import dev.redfox.messages.core.ui.components.DetailPage
-import dev.redfox.messages.core.ui.mvi.CollectEffects
+import dev.redfox.messages.core.ui.theme.toAppAccent
+import dev.redfox.messages.core.ui.theme.toObsidian
+import dev.redfox.obsidian.components.AccentSwatchRow
+import dev.redfox.obsidian.components.DetailPage
 import dev.redfox.obsidian.components.ObCard
 import dev.redfox.obsidian.components.ObDivider
+import dev.redfox.obsidian.components.ObDropdownMenu
 import dev.redfox.obsidian.components.ObListRow
+import dev.redfox.obsidian.components.ObMenuItem
 import dev.redfox.obsidian.components.SectionLabel
 import dev.redfox.obsidian.effects.glassSource
 import dev.redfox.obsidian.motion.RevealColumn
@@ -48,16 +49,10 @@ data object SettingsKey : NavKey
 fun SettingsRoute(
     versionLabel: String,
     onBack: () -> Unit,
-    onOpenDesignShowcase: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.dispatch(SettingsIntent.Refresh) }
-    CollectEffects(viewModel.effects) { effect ->
-        when (effect) {
-            SettingsEffect.OpenDesignShowcase -> onOpenDesignShowcase()
-        }
-    }
     SettingsScreen(state = state, versionLabel = versionLabel, onBack = onBack, onIntent = viewModel::dispatch)
 }
 
@@ -85,8 +80,8 @@ fun SettingsScreen(
                     subtitle = state.accent.name,
                 )
                 AccentSwatchRow(
-                    selected = state.accent,
-                    onSelect = { onIntent(SettingsIntent.AccentSelected(it)) },
+                    selected = state.accent.toObsidian(),
+                    onSelect = { onIntent(SettingsIntent.AccentSelected(it.toAppAccent())) },
                     modifier = Modifier.padding(top = ObSpacing.L, start = ObSpacing.XXS)
                 )
             }
@@ -127,14 +122,6 @@ fun SettingsScreen(
                 )
             }
             Section("Developer") {
-                ObListRow(
-                    title = "Design showcase",
-                    icon = R.drawable.ic_bug_report,
-                    subtitle = "Obsidian tokens & components",
-                    onClick = { onIntent(SettingsIntent.DesignShowcaseClicked) },
-                    trailing = { Chevron() },
-                )
-                ObDivider(Modifier.padding(vertical = ObSpacing.M))
                 ObListRow(
                     title = "Version",
                     icon = R.drawable.ic_check_circle,

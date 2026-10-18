@@ -1,12 +1,12 @@
 package dev.redfox.messages.navigation
 
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -21,26 +21,18 @@ import dev.redfox.messages.feature.onboarding.OnboardingRoute
 import dev.redfox.messages.feature.settings.SettingsKey
 import dev.redfox.messages.feature.settings.SettingsRoute
 import dev.redfox.messages.feature.thread.ThreadKey
-import dev.redfox.messages.saved.SavedKey
-import dev.redfox.messages.saved.SavedRoute
 import dev.redfox.messages.feature.thread.ThreadRoute
 import dev.redfox.messages.feature.thread.newchat.NewConversationKey
 import dev.redfox.messages.feature.thread.newchat.NewConversationRoute
+import dev.redfox.messages.saved.SavedKey
+import dev.redfox.messages.saved.SavedRoute
 import dev.redfox.obsidian.motion.ObMotion
 import dev.redfox.obsidian.motion.RevealScope
-import dev.redfox.obsidian.showcase.ObsidianShowcase
-import dev.redfox.obsidian.theme.ObsidianAccent
-import kotlinx.serialization.Serializable
-
-/** Debug style guide: Obsidian's showcase, with its swatches wired to the app accent. */
-@Serializable
-data object DesignShowcaseKey : NavKey
 
 @Composable
 fun MessagesNavHost(
     navigator: Navigator,
     versionLabel: String,
-    onShowcaseAccentChange: (ObsidianAccent) -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -90,13 +82,8 @@ fun MessagesNavHost(
                     SettingsRoute(
                         versionLabel = versionLabel,
                         onBack = { navigator.back() },
-                        onOpenDesignShowcase = { navigator.navigate(DesignShowcaseKey) },
                     )
                 }
-            }
-            entry<DesignShowcaseKey> {
-                // ObsidianShowcase wraps itself in a RevealScope.
-                ObsidianShowcase(onAccentChange = onShowcaseAccentChange)
             }
         },
     )

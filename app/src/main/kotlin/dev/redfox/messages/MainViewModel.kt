@@ -4,8 +4,6 @@ import androidx.compose.runtime.Immutable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.redfox.messages.core.domain.usecase.ObserveSettingsUseCase
 import dev.redfox.messages.core.domain.usecase.ResolveThreadUseCase
-import dev.redfox.messages.core.domain.usecase.SetAccentUseCase
-import dev.redfox.messages.core.model.AppAccent
 import dev.redfox.messages.core.model.AppSettings
 import dev.redfox.messages.core.ui.mvi.MviViewModel
 import dev.redfox.messages.core.ui.mvi.UiEffect
@@ -20,8 +18,6 @@ data class MainState(
 ) : UiState
 
 sealed interface MainIntent : UiIntent {
-    data class AccentChanged(val accent: AppAccent) : MainIntent
-
     /**
      * The app was opened to a conversation from outside: a notification (thread known) or
      * another app's `sms:` link (addresses known, maybe a pre-filled [body]). With neither,
@@ -39,7 +35,6 @@ sealed interface MainEffect : UiEffect {
 @HiltViewModel
 class MainViewModel @Inject constructor(
     observeSettings: ObserveSettingsUseCase,
-    private val setAccent: SetAccentUseCase,
     private val resolveThread: ResolveThreadUseCase,
 ) : MviViewModel<MainState, MainIntent, MainEffect>(MainState()) {
 
@@ -49,7 +44,6 @@ class MainViewModel @Inject constructor(
 
     override suspend fun handle(intent: MainIntent) {
         when (intent) {
-            is MainIntent.AccentChanged -> setAccent(intent.accent)
             is MainIntent.OpenExternal -> openExternal(intent)
         }
     }

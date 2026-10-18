@@ -38,7 +38,7 @@ import androidx.navigation3.runtime.NavKey
 import dev.redfox.messages.core.model.Contact
 import dev.redfox.messages.core.ui.R
 import dev.redfox.messages.core.ui.components.Avatar
-import dev.redfox.messages.core.ui.components.DetailPage
+import dev.redfox.obsidian.components.DetailPage
 import dev.redfox.messages.core.ui.mvi.CollectEffects
 import dev.redfox.obsidian.components.EmptyState
 import dev.redfox.obsidian.components.ObListRow

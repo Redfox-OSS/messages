@@ -26,11 +26,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import dev.redfox.messages.core.model.ScheduledMessage
 import dev.redfox.messages.core.ui.R
-import dev.redfox.messages.core.ui.components.ObSheet
+import dev.redfox.obsidian.components.ObSheet
 import dev.redfox.messages.core.ui.components.SchedulePicker
-import dev.redfox.messages.core.ui.components.SheetAction
+import dev.redfox.obsidian.components.SheetAction
 import dev.redfox.messages.core.ui.components.formatScheduleTime
-import dev.redfox.messages.core.ui.platform.copyToClipboard
+import dev.redfox.obsidian.platform.copyToClipboard
 import dev.redfox.messages.core.ui.platform.rememberCaller
 import dev.redfox.obsidian.components.HeaderIconButton
 import dev.redfox.obsidian.components.ObAlertDialog
@@ -75,8 +75,8 @@ import androidx.paging.compose.itemKey
 import dev.redfox.messages.core.ui.components.BubblePosition
 import dev.redfox.messages.core.ui.components.ComposerBar
 import dev.redfox.messages.core.ui.components.ComposerNotice
-import dev.redfox.messages.core.ui.components.DateDivider
-import dev.redfox.messages.core.ui.components.DetailPage
+import dev.redfox.obsidian.components.DateDivider
+import dev.redfox.obsidian.components.DetailPage
 import dev.redfox.messages.core.ui.components.MessageBubble
 import dev.redfox.messages.core.ui.components.RichCardBubble
 import dev.redfox.messages.core.ui.format.TimeFormat

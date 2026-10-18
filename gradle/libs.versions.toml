@@ -4,7 +4,7 @@ agp = "9.2.1"
 kotlin = "2.2.10"
 ksp = "2.2.10-2.0.2"
 composeBom = "2026.02.01"
-obsidian = "1.0.0"
+obsidian = "2.0.0"
 
 coreKtx = "1.18.0"
 activityCompose = "1.13.0"
