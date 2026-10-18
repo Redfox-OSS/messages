@@ -31,9 +31,6 @@ Builds:
       - sed -i -e '/foojay-resolver/d' ../external/obsidian/settings.gradle.kts
     scanignore:
       - external/obsidian/obsidian/build.gradle.kts
-    scandelete:
-      - build-logic/convention/build
-      - external/obsidian/build-logic/convention/build
     gradleprops:
       - obsidian.fromSource=true
 
