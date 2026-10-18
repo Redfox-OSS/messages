@@ -17,7 +17,7 @@ Binaries: https://github.com/Redfox-OSS/messages/releases/download/v%v/Messages-
 Builds:
   - versionName: 1.0.0
     versionCode: 4
-    commit: v1.0.0
+    commit: 2b0bba18c66845fe7b8a24319ce258c4dd125956
     subdir: app
     submodules: true
     sudo:
@@ -26,7 +26,14 @@ Builds:
       - update-java-alternatives -a
     gradle:
       - yes
-    prebuild: sed -i -e '/redfox-oss.github.io/d' ../settings.gradle.kts
+    prebuild:
+      - sed -i -e '/redfox-oss.github.io/d' -e '/foojay-resolver/d' ../settings.gradle.kts
+      - sed -i -e '/foojay-resolver/d' ../external/obsidian/settings.gradle.kts
+    scanignore:
+      - external/obsidian/obsidian/build.gradle.kts
+    scandelete:
+      - build-logic/convention/build
+      - external/obsidian/build-logic/convention/build
     gradleprops:
       - obsidian.fromSource=true
 
