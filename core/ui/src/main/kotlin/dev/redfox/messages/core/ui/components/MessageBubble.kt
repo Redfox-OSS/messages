@@ -63,6 +63,9 @@ fun MessageBubble(
     onLongPress: (() -> Unit)? = null,
     /** Retry a failed MMS download. */
     onRetryDownload: (() -> Unit)? = null,
+    /** The one-time code in the message ([dev.redfox.messages.core.domain.OtpExtractor]), offered as a copy button. */
+    otp: String? = null,
+    onCopyOtp: (String) -> Unit = {},
 ) {
     val colors = ObsidianTheme.colors
     val type = ObsidianTheme.typography
@@ -109,6 +112,9 @@ fun MessageBubble(
                 // long-press message sheet (PLAN.md §8.4).
                 message.body.isNotEmpty() -> LinkifiedText(message.body, style = type.body, color = colors.textPrimary)
             }
+        }
+        if (otp != null) {
+            OtpCopyButton(code = otp, onCopy = onCopyOtp, modifier = Modifier.padding(top = ObSpacing.XS))
         }
         if (brandLinks.isNotEmpty()) {
             BrandLinkButtons(

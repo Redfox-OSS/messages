@@ -12,8 +12,6 @@ import androidx.core.content.ContextCompat
 import dev.redfox.messages.core.model.OutgoingAttachment
 import dev.redfox.messages.core.ui.platform.VoiceNote
 import dev.redfox.messages.core.ui.platform.VoiceRecorder
-import android.content.ClipData
-import android.content.ClipboardManager
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -32,6 +30,7 @@ import dev.redfox.messages.core.ui.components.ObSheet
 import dev.redfox.messages.core.ui.components.SchedulePicker
 import dev.redfox.messages.core.ui.components.SheetAction
 import dev.redfox.messages.core.ui.components.formatScheduleTime
+import dev.redfox.messages.core.ui.platform.copyToClipboard
 import dev.redfox.messages.core.ui.platform.rememberCaller
 import dev.redfox.obsidian.components.HeaderIconButton
 import dev.redfox.obsidian.components.ObAlertDialog
@@ -149,8 +148,8 @@ fun ThreadRoute(
             }
             // The sent message isn't in the list yet; FollowNewest scrolls once it lands.
             ThreadEffect.ScrollToNewest -> scrollToSent = true
-            is ThreadEffect.CopyText -> context.getSystemService(ClipboardManager::class.java)
-                .setPrimaryClip(ClipData.newPlainText("Message", effect.text))
+            is ThreadEffect.CopyText -> context.copyToClipboard("Message", effect.text)
+            is ThreadEffect.CopyOtp -> context.copyToClipboard("OTP", effect.code, sensitive = true)
             is ThreadEffect.Call -> call(effect.phoneNumber)
             is ThreadEffect.ShowError -> Toast.makeText(context, effect.message, Toast.LENGTH_LONG).show()
         }
@@ -246,6 +245,8 @@ fun ThreadScreen(
                                 isStarred = row.message.key in state.starredKeys,
                                 onLongPress = { onIntent(ThreadIntent.MessageLongPressed(row.message)) },
                                 onRetryDownload = { onIntent(ThreadIntent.RetryDownload(row.message)) },
+                                otp = row.otp,
+                                onCopyOtp = { onIntent(ThreadIntent.CopyOtp(it)) },
                                 modifier = reveal.padding(
                                     // Tight gap inside a run, a breath between runs.
                                     top = if (layout.position == BubblePosition.Middle || layout.position == BubblePosition.Last) 2.dp

@@ -10,6 +10,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.redfox.messages.core.domain.OtpExtractor
 import dev.redfox.messages.core.domain.SmsLength
 import dev.redfox.messages.core.domain.usecase.DeleteMessageUseCase
 import dev.redfox.messages.core.domain.usecase.GetSimsUseCase
@@ -114,6 +115,7 @@ sealed interface ThreadIntent : UiIntent {
     data object SwitchSim : ThreadIntent
     data class Retry(val message: Message) : ThreadIntent
     data class OpenBrandLink(val link: BrandLink) : ThreadIntent
+    data class CopyOtp(val code: String) : ThreadIntent
     data class MessageLongPressed(val message: Message) : ThreadIntent
     data object DismissActions : ThreadIntent
     data object CopyMessage : ThreadIntent
@@ -139,6 +141,8 @@ sealed interface ThreadEffect : UiEffect {
     /** A message was just sent: bring the newest message into view. */
     data object ScrollToNewest : ThreadEffect
     data class CopyText(val text: String) : ThreadEffect
+    /** A one-time code: copied as a sensitive clip, hidden from clipboard previews and history. */
+    data class CopyOtp(val code: String) : ThreadEffect
     data class Call(val phoneNumber: String) : ThreadEffect
     data class ShowError(val message: String) : ThreadEffect
 }
@@ -191,7 +195,9 @@ class ThreadViewModel @AssistedInject constructor(
     val rows: Flow<PagingData<ThreadRow>> = pagedMessages(threadId)
         .map { page ->
             val now = System.currentTimeMillis()
-            page.map<_, ThreadRow> { ThreadRow.Msg(it, LinkBrands.find(it.body)) }
+            page.map<_, ThreadRow> {
+                ThreadRow.Msg(it, LinkBrands.find(it.body), otp = if (it.isOutgoing) null else OtpExtractor.extract(it.body))
+            }
                 .insertSeparators { newer, older ->
                     daySeparator((newer as? ThreadRow.Msg)?.message, (older as? ThreadRow.Msg)?.message, timeFormat, now)
                 }
@@ -280,6 +286,7 @@ class ThreadViewModel @AssistedInject constructor(
             is ThreadIntent.RetryDownload -> runCatching { retryDownload(intent.message) }
             // Same as tapping the link itself: Android opens it in the app that claims it, else the browser.
             is ThreadIntent.OpenBrandLink -> emit(ThreadEffect.OpenUrl(intent.link.url))
+            is ThreadIntent.CopyOtp -> emit(ThreadEffect.CopyOtp(intent.code))
         }
     }
 

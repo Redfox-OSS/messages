@@ -13,8 +13,13 @@ sealed interface ThreadRow {
 
     data class Day(override val key: String, val label: String) : ThreadRow
 
-    /** [brandLinks] are found while paging (off the main thread), not while drawing. */
-    data class Msg(val message: Message, val brandLinks: List<BrandLink> = emptyList()) : ThreadRow {
+    /** [brandLinks] and [otp] are found while paging (off the main thread), not while drawing. */
+    data class Msg(
+        val message: Message,
+        val brandLinks: List<BrandLink> = emptyList(),
+        /** The one-time code in an incoming message, for its copy button. */
+        val otp: String? = null,
+    ) : ThreadRow {
         override val key: String get() = message.key
     }
 }
